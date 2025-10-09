@@ -1,10 +1,11 @@
 import sys
-sys.path.append('/home/investigator/mariandbt/python/notebooks/modules')
-sys.path.append('/scratch/marian/python/notebooks/modules')
+import os
 
-from import_modules import *
-import s2_simulation as s2sim
-
+import matplotlib.pyplot  as plt
+import numpy              as np
+import pandas             as pd
+import tables             as tb
+import scipy
 
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
@@ -429,11 +430,28 @@ def sum_of_gaussians(x, *params):
 
 #     return result
 
+def ResponseSiPM(q_in_pes, t, t0, rise_time, decay_time, baseline = 0):
+
+    """
+    NOTE: units of t, t0, rise_time and decay_time must be the same
+    """
+    rise_term   = 1 - np.exp(-(t - t0) / rise_time)
+    decay_term  = np.exp(-(t - t0) / decay_time)
+
+    signal          = (rise_term * decay_term)
+    signal[t<t0]    = 0
+    signal          = signal + baseline
+    signal_area     = np.trapz(x = t, y = signal) or 1
+
+    normalized_signal = q_in_pes*signal/signal_area
+
+    return normalized_signal 
+
 
 def ConvolvedResponseSiPM(t, mu, sigma, t0, rise, tau, wvf_area, baseline = 0):
-    """Convolution between s2sim.ResponseSiPM and a Gaussian."""
+    """Convolution between ResponseSiPM and a Gaussian."""
     dt = t[1] - t[0]  # Assuming uniform spacing in t
-    response = s2sim.ResponseSiPM(wvf_area, t, t0, rise, tau, baseline)
+    response = ResponseSiPM(wvf_area, t, t0, rise, tau, baseline)
     gauss = (1.0 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((t - mu) / sigma) ** 2)
     
     # Perform convolution
@@ -582,11 +600,11 @@ def exponential(t, t0, tau, A):
     
 
 def cigar_response(t, A, t0, rise, tau, A0, tau1, A1, tau2, A2, tau3, A3):
-    """Convolution between s2sim.ResponseSiPM and a double exponential."""
+    """Convolution between ResponseSiPM and a double exponential."""
     dt = t[1] - t[0]  # Assuming uniform spacing in t
     
     # effect of the sensor
-    response = s2sim.ResponseSiPM(A, t, t0, rise, tau)
+    response = ResponseSiPM(A, t, t0, rise, tau)
     
     # effect of the gas
     double_exp = double_exponential(t, 0, A0, tau1, A1, tau2, A2)
