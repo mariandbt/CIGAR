@@ -264,10 +264,10 @@ axs[-1].set_xlabel("Integral Sum")
 #plt.tight_layout()
 #plt.show()
 
-plt.savefig("/scratch/marian/cigar/outputs/"+outfile+".png", dpi=300)
+plt.savefig("../outputs/"+outfile+".png", dpi=300)
 
 # Save the charge_sums data as a pickle file
-with open("/scratch/marian/cigar/outputs/"+outfile+".pkl", "wb") as f:
+with open("../outputs/"+outfile+".pkl", "wb") as f:
     pickle.dump(hist_counts, f)
 
 

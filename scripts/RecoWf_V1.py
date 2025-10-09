@@ -1,14 +1,26 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
-import utilityV2 as utility
-import baseline_calV2 as baseline_cal
 import numpy as np
 from scipy.ndimage import gaussian_filter1d    
-import parse_data 
 import os
 import argparse
 import sys
+
+# Get the directory of the current file (RecoWf_V1.py)
+current_dir = os.path.dirname(__file__)
+
+# Build the absolute path to ../functions
+functions_path = os.path.abspath(os.path.join(current_dir, '../functions'))
+
+# Add it to sys.path
+sys.path.append(functions_path)
+
+# Import functions
+import utilityV2 as utility
+import baseline_calV2 as baseline_cal
+import parse_data 
+
     
 #Load reco parameters
 if __name__== '__main__':
