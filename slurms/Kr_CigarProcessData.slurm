@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200000
 
-#SBATCH --error=errors/%x-%j.err
+#SBATCH --error=errors/%x-%A_%a.err
 
 #SBATCH --mail-user=mariandelbarrio@gmail.com # CHANGE HERE YOU'RE EMAIL
 #SBATCH --mail-type=ALL

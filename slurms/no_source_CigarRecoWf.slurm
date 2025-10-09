@@ -5,11 +5,11 @@
 #SBATCH --time=0-23:59:59
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --ntasks=1             # tasks per instance
-#SBATCH --array=1-26           # instance indexes # CHANGE HOW MANY FILES YOU WANT TO PROCESS
+#SBATCH --array=1-1           # instance indexes # CHANGE HOW MANY FILES YOU WANT TO PROCESS
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200000
 
-#SBATCH --error=errors/%x-%j.err
+#SBATCH --error=errors/%x-%A_%a.err
 
 #SBATCH --mail-user=mariandelbarrio@gmail.com # CHANGE HERE YOU'RE EMAIL
 #SBATCH --mail-type=ALL
@@ -35,7 +35,7 @@ INPUT_FILE=$(ls ${INPUT_DIR}/*.bin | sort | sed -n "$((SLURM_ARRAY_TASK_ID))p")
 
 # Define output file based on input filename (optional customization)
 OUTPUT_DIR="${CIGAR_DIR}/outputs"
-OUTPUT_FILE="${OUTPUT_DIR}/20250620_ArXe_3.5bar_no_source_6deg_Autotrg_output_${SLURM_ARRAY_TASK_ID}.csv" # CHANGE HERE YOUR OUTPUT FILE
+OUTPUT_FILE="${OUTPUT_DIR}/TEST_${SLURM_ARRAY_TASK_ID}.csv" # CHANGE HERE YOUR OUTPUT FILE
 
 
 # Run your Python script
