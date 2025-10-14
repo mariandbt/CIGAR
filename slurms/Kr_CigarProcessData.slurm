@@ -32,7 +32,6 @@ INPUT_DIR="/data/marian/cigar/ProcessedWaveforms/20250612_Kr_7.5bar_ArXe_9deg" #
 
 # Define output file based on input filename (optional customization)
 OUTPUT_DIR="../outputs" # HARDCODED (CHECK ProcessData_thr.py SCRIPT)
-OUTPUT_DIR="/scratch/marian/cigar/outputs"
 OUTPUT_FILE="20250612_ArXe_7.5bar_Kr_9deg_Autotrg_hist"
 
 

@@ -1,13 +1,19 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+
 from scipy.signal import find_peaks
 from scipy.fft import fft, fftfreq, ifft
 
-pheshape = { 'CH1' : pd.read_csv("singlePhes/averageval_0_vs_TIME.csv"),
-    'CH2' : pd.read_csv("singlePhes/averageval_1_vs_TIME.csv"),
-    'CH3' : pd.read_csv("singlePhes/averageval_2_vs_TIME.csv"),
-    'CH4' : pd.read_csv("singlePhes/averageval_3_vs_TIME.csv")
+# Get the directory of the current file (RecoWf_V1.py)
+current_dir = os.path.dirname(__file__)
+scripts_dir = os.path.abspath(os.path.join(current_dir, '../scripts'))
+
+pheshape = { 'CH1' : pd.read_csv(f"{scripts_dir}/singlePhes/averageval_0_vs_TIME.csv"),
+    'CH2' : pd.read_csv(f"{scripts_dir}/singlePhes/averageval_1_vs_TIME.csv"),
+    'CH3' : pd.read_csv(f"{scripts_dir}/singlePhes/averageval_2_vs_TIME.csv"),
+    'CH4' : pd.read_csv(f"{scripts_dir}/singlePhes/averageval_3_vs_TIME.csv")
 }
 
 def remove_comments(file_content):
