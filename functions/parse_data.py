@@ -86,7 +86,7 @@ def parse_txt_to_dataframe_multich(file_path):
 def parse_wf_from_binary(filename):
     data_list = []
     nlines=0
-    nevents=2000
+    nevents=300
     with open(filename, "rb") as f:
         while True:
             # Read the header
