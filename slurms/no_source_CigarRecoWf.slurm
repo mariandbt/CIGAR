@@ -2,7 +2,7 @@
 #SBATCH --partition=general
 #SBATCH --qos=regular
 #SBATCH --job-name=no_source_RecoWvf
-#SBATCH --time=0-23:59:59
+#SBATCH --time=0-01:00:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --ntasks=1             # tasks per instance
 #SBATCH --array=1-8           # instance indexes # CHANGE HOW MANY FILES YOU WANT TO PROCESS
