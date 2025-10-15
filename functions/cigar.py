@@ -91,8 +91,8 @@ def GetSpeRun(channel, bars):
     run = runsSpe[f'CH{channel}'][bars]
     return run
 
-def read_directory(run, file_type = 'h5'):
-    run_path = os.path.join(path, run) 
+def read_directory(runs_directory, run, file_type = 'h5'):
+    run_path = os.path.join(runs_directory, run) 
 
     # Use glob to find all .h5 files in the directory
     files_list = glob.glob(f"{run_path}/*.{file_type}")
@@ -792,7 +792,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
         "CH4":(6.53e-8,-1.38e-8)  # V*s
         }
 
-    elif temp == 2:
+    elif temp == '2deg':
         # 2degs measured at 8.5bars
             ConvPar={
             "CH1":(6.16e-8,-1.00e-8), # V*s
@@ -801,7 +801,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(5.93e-8,-3.74e-9)  # V*s
             }
 
-    elif temp == 4:
+    elif temp == '4deg':
         # 4degs measured at 6.5bars
             ConvPar={
             "CH1":(5.82e-8,-2.92e-9), # V*s
@@ -810,7 +810,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(6.00e-8,-4.14e-9)  # V*s
             }
 
-    elif temp == 9:
+    elif temp == '9deg':
         # 9degs measured at 7.5bars
             ConvPar={
             "CH1":(6.17e-8,-9.48e-9), # V*s
@@ -821,7 +821,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
 
     
 
-    elif temp == 10:
+    elif temp == '10deg':
         # 10degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.14e-8,-1.38e-8), # V*s
@@ -830,7 +830,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(4.26e-8,-6.83e-9)  # V*s
             }
 
-    elif temp == 13:
+    elif temp == '13deg':
         # 13degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.38e-8,-1.64e-8), # V*s
@@ -839,7 +839,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(4.36e-8,-6.72e-9)  # V*s
             }
 
-    elif temp == 16:
+    elif temp == '16deg':
         # 16degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.37e-8,-1.41e-8), # V*s
@@ -848,7 +848,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(4.43e-8,-6.94e-9)  # V*s
             }
 
-    elif temp == 19:
+    elif temp == '19deg':
         # 19degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.41e-8,-1.64e-8), # V*s
@@ -857,7 +857,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(4.45e-8,-7.99e-9)  # V*s
             }
 
-    elif temp == 22:
+    elif temp == '22deg':
         # 22degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.38e-8,-1.71e-8), # V*s
@@ -866,7 +866,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
             "CH4":(4.46e-8,-8.95e-9)  # V*s
             }
 
-    elif temp == 25:
+    elif temp == '25deg':
         # 22degs measured at atmospheric pressure
             ConvPar={
             "CH1":(7.39e-8,-2.02e-8), # V*s
