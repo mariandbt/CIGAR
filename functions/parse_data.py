@@ -2,6 +2,8 @@
 import pandas as pd
 import re
 import struct
+import numpy as np
+from pathlib import Path
 
 def parse_txt_to_dataframe(file_path):
     data = []
@@ -82,61 +84,136 @@ def parse_txt_to_dataframe_multich(file_path):
     return df
 
 
+def parse_wf_from_binary(
+    path,
+    *,
+    channels=4,
+    n_events=500,
+    dtype="<f4",          # little-endian float32
+    event_header_bytes=28, # size of per-event header in bytes
+    sample_binning=8e-9    # seconds per sample (default 8 ns)
+):
+    """
+    Reads binary waveform data and returns a tidy pandas DataFrame.
 
-def parse_wf_from_binary(filename):
-    data_list = []
-    nlines=0
-    nevents=300
-    with open(filename, "rb") as f:
-        while True:
-            # Read the header
-            data = f.read(4)  # Read uint32_t EVID
-            if not data:
-                break
-            EVID = struct.unpack("<I", data)[0]
-            data = f.read(8)  # Read uint64_t T
-            if not data:
-                break
-            T = struct.unpack("<Q", data)[0]
-            data = f.read(4)  # Read uint32_t size
-            if not data:
-                break
-            size = struct.unpack("<I", data)[0]
-            data = f.read(8)  # Read uint64_t sampl_time
-            if not data:
-                break
-            sampl_time = struct.unpack("<Q", data)[0]
-            data = f.read(4)  # Read uint32_t ch (number of channels)
-            if not data:
-                break
-            ch = struct.unpack("<I", data)[0]
-            waveform_data = {}
-            # Read waveforms for each channel
-            for channel in range(ch):
-                data = f.read(2)  # Read uint16_t numch
-                if not data:
-                    break
-                numch = struct.unpack("<H", data)[0]
-                channel_waveforms = []
-                for _ in range(size):
-                    data = f.read(4)  # Read float w
-                    if not data:
-                        break
-                    w = struct.unpack("<f", data)[0]
-                    channel_waveforms.append(w)
-                waveform_data[f'{numch}'] = channel_waveforms
-            # Create a row per sample point with all channels aligned
-            for i in range(size):
-                row = {}
-                
-                row.update({f'CH{j+1}': waveform_data[f'{numch}'][i]/1e3 for j,numch in enumerate(waveform_data)})
-                row.update({"event": EVID})
-                row.update({"event_time": T})
+    Each event layout: [event_header_bytes] + [channels * samples_per_waveform * dtype]
 
-                data_list.append(row)
+    Args:
+        path (str or Path): Path to the binary file
+        channels (int): Number of waveform channels
+        n_events (int or None): Number of events to read. If None, read all events in file.
+        dtype (str): Data type of waveform samples
+        event_header_bytes (int): Size of per-event header in bytes (0 if none)
+        sample_binning (float): Sample spacing in seconds
 
-    print(nlines,nevents)
-    df = pd.DataFrame(data_list)
-    df.insert(0, 'TIME', (df.index % size + 1) * sampl_time/1e9)  # Time in microseconds
+    Returns:
+        df (pd.DataFrame): Columns = TIME, CH1..CHn, event, event_time
+    """
+    path = Path(path)
+    file_size = path.stat().st_size
+    sample_bytes = np.dtype(dtype).itemsize
 
+    if n_events is None:
+        raise ValueError("You must provide n_events (no default samples_per_waveform available).")
+
+    # Compute number of samples per waveform
+    bytes_per_event = file_size // n_events
+    data_bytes_per_event = bytes_per_event - event_header_bytes
+    if data_bytes_per_event % (channels * sample_bytes) != 0:
+        raise ValueError("File size does not match given n_events and channels.")
+    samples_per_waveform = data_bytes_per_event // (channels * sample_bytes)
+
+    records = []
+
+    with path.open("rb") as f:
+        for evt in range(n_events):
+            # ---- Read header ----
+            event_id = None
+            event_time = None
+            if event_header_bytes:
+                h = f.read(event_header_bytes)
+                if len(h) < event_header_bytes:
+                    raise RuntimeError(f"Unexpected EOF while reading header for event {evt}")
+                # interpret header minimally like SECOND: EVID + T
+                if event_header_bytes >= 12:
+                    event_id = struct.unpack("<I", h[0:4])[0]
+                    event_time = struct.unpack("<Q", h[4:12])[0]
+
+            # ---- Read waveform ----
+            buf = f.read(data_bytes_per_event)
+            if len(buf) < data_bytes_per_event:
+                raise RuntimeError(f"Unexpected EOF while reading waveform for event {evt}")
+
+            arr = np.frombuffer(buf, dtype=dtype).reshape(channels, samples_per_waveform)
+
+            # ---- Build tidy rows ----
+            for i in range(samples_per_waveform):
+                row = {
+                        "TIME": (i + 1) * sample_binning,  # TIME first
+                        **{f"CH{ch+1}": float(arr[ch, i]) for ch in range(channels)},  # channel values
+                        "event": event_id if event_id is not None else evt,
+                        "event_time": event_time if event_time is not None else 0
+                    }
+                records.append(row)
+
+    df = pd.DataFrame(records)
     return df
+
+
+# def parse_wf_from_binary(filename):
+#     data_list = []
+#     nlines=0
+#     nevents=300
+#     with open(filename, "rb") as f:
+#         while True:
+#             # Read the header
+#             data = f.read(4)  # Read uint32_t EVID
+#             if not data:
+#                 break
+#             EVID = struct.unpack("<I", data)[0]
+#             data = f.read(8)  # Read uint64_t T
+#             if not data:
+#                 break
+#             T = struct.unpack("<Q", data)[0]
+#             data = f.read(4)  # Read uint32_t size
+#             if not data:
+#                 break
+#             size = struct.unpack("<I", data)[0]
+#             data = f.read(8)  # Read uint64_t sampl_time
+#             if not data:
+#                 break
+#             sampl_time = struct.unpack("<Q", data)[0]
+#             data = f.read(4)  # Read uint32_t ch (number of channels)
+#             if not data:
+#                 break
+#             ch = struct.unpack("<I", data)[0]
+#             waveform_data = {}
+#             # Read waveforms for each channel
+#             for channel in range(ch):
+#                 data = f.read(2)  # Read uint16_t numch
+#                 if not data:
+#                     break
+#                 numch = struct.unpack("<H", data)[0]
+#                 channel_waveforms = []
+#                 for _ in range(size):
+#                     data = f.read(4)  # Read float w
+#                     if not data:
+#                         break
+#                     w = struct.unpack("<f", data)[0]
+#                     channel_waveforms.append(w)
+#                 waveform_data[f'{numch}'] = channel_waveforms
+#             # Create a row per sample point with all channels aligned
+#             for i in range(size):
+#                 row = {}
+                
+#                 row.update({f'CH{j+1}': waveform_data[f'{numch}'][i]/1e3 for j,numch in enumerate(waveform_data)})
+#                 row.update({"event": EVID})
+#                 row.update({"event_time": T})
+
+#                 data_list.append(row)
+
+#     print(nlines,nevents)
+#     df = pd.DataFrame(data_list)
+#     df.insert(0, 'TIME', (df.index % size + 1) * sampl_time/1e9)  # Time in microseconds
+
+#     return df
