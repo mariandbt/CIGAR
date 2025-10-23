@@ -10,7 +10,7 @@ import scipy
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
-
+from scipy.ndimage import uniform_filter1d
 
 import re
 import struct
@@ -894,6 +894,69 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False):
 
     photoelectrons = (integral - p1) / p0
     return photoelectrons
+
+def CreateWfSum(wf, channels, params):
+
+    ChList = wf.columns[1:-3].tolist() 
+    print(ChList)
+
+    amp_factors = params['amp_factors']
+    avg_amp_factor = np.mean(list(amp_factors.values()))  # Average amplification factor
+    
+    if params["is_amplified"] == True:
+        # Calculate CHSum with amplification adjustments
+        wf['CHSum'] = sum(  wf[channels[i]] / amp_factors[ch] * avg_amp_factor for i, ch in enumerate(amp_factors.keys())  )
+    else:
+        # Simple sum of the channels
+        wf['CHSum'] = sum(wf[ch] for ch in channels)
+            
+    # Return the dataframe with the required columns
+    return wf[['TIME']+ ChList +['CHSum', 'event', 'event_time', 'file_idx']]
+
+def BaselineCorrection(voltage_matrix: np.ndarray, window: int):
+    """
+    Baseline correction for waveforms using minimum RMS window.
+
+    Parameters
+    ----------
+    voltage_matrix : np.ndarray
+        2D array of shape (nevents, nsamples), each row is a waveform.
+    window : int
+        Sliding window size for RMS and mean calculation.
+
+    Returns
+    -------
+    voltage_corrected : np.ndarray
+        Baseline-corrected waveforms, same shape as voltage_matrix.
+    baselines : np.ndarray
+        Estimated baseline per waveform, shape (nevents,).
+    """
+
+    # 1) Moving RMS profile (to locate quietest region)
+    # NOTE: we have to first shift the matrix: voltage_matrix - voltage_matrix.min()
+    # This way all values are above 0 (if not the RMS )
+    sq_mean = uniform_filter1d((voltage_matrix - voltage_matrix.min(axis=1)[:, None])**2, size=window, axis=1, mode="nearest")
+    rms = np.sqrt(sq_mean)                                # (nevents, nsamples)
+
+    # 2) Moving mean profile (to get baseline value directly)
+    mean_profile = uniform_filter1d(voltage_matrix, size=window, axis=1, mode="nearest")
+    # shape: (nevents, nsamples)
+
+    # 3) Index of minimum RMS per row
+    min_idx = np.argmin(rms, axis=1)                      # (nevents,)
+
+    # 4) Gather baseline mean from mean_profile
+    row_idx = np.arange(voltage_matrix.shape[0])
+    baselines = mean_profile[row_idx, min_idx]            # (nevents,)
+
+    # 5) Subtract baseline from each waveform
+    voltage_corrected = voltage_matrix - baselines[:, None]
+
+    # 6) Calculate starting index of the window
+    # uniform_filter1d uses a centered window, so starting index is offset
+    min_rms_indices = np.clip(min_idx - window // 2, 0, voltage_matrix.shape[1]-1)
+
+    return voltage_corrected, baselines, min_rms_indices
 
 
 def BaselinePeakCorrection(t, matrix, baseline_th_in_s = -0.2e-6, baseline_tolerance_in_V = 0.01e-3):

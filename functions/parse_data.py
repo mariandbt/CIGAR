@@ -89,6 +89,7 @@ def parse_wf_from_binary(
     *,
     channels=4,
     n_events=500,
+    file_idx = 0,
     dtype="<f4",          # little-endian float32
     event_header_bytes=28, # size of per-event header in bytes
     sample_binning=8e-9    # seconds per sample (default 8 ns)
@@ -146,19 +147,82 @@ def parse_wf_from_binary(
 
             arr = np.frombuffer(buf, dtype=dtype).reshape(channels, samples_per_waveform)
 
+            # ---- Compute unique event ID ----
+            global_event_id = file_idx * n_events + evt
+
             # ---- Build tidy rows ----
             for i in range(samples_per_waveform):
                 row = {
                         "TIME": (i + 1) * sample_binning,  # TIME first
                         **{f"CH{ch+1}": float(arr[ch, i]) for ch in range(channels)},  # channel values
-                        "event": event_id if event_id is not None else evt,
-                        "event_time": event_time if event_time is not None else 0
+                        "event": global_event_id,
+                        "event_time": event_time if event_time is not None else 0,
+                        'file_idx':file_idx
                     }
                 records.append(row)
 
     df = pd.DataFrame(records)
     return df
 
+def load_waveforms_until_eof(
+    path,
+    *,
+    channels=4,
+    samples_per_waveform=752,
+    dtype="<f4",          # little-endian float32
+    event_header_bytes=28 # set to 0 if there's no per-event header
+):
+    """
+    Reads events until EOF.
+    Each event layout: [event_header_bytes] + [channels * samples_per_waveform * dtype]
+    Returns:
+      waveforms: (num_events, channels, samples_per_waveform) array
+      headers:   (num_events, event_header_bytes//4) <u4 array (or None if header_bytes==0)
+    """
+    path = Path(path)
+    sample_bytes = np.dtype(dtype).itemsize
+    data_bytes_per_event = channels * samples_per_waveform * sample_bytes
+
+    wfs = []
+    hdrs = [] if event_header_bytes else None
+
+    with path.open("rb") as f:
+        evt = 0
+        while True:
+            # Read per-event header (if any)
+            if event_header_bytes:
+                h = f.read(event_header_bytes)
+                if not h:
+                    break  # clean EOF at boundary
+                if len(h) != event_header_bytes:
+                    print(f"Warning: partial header at event {evt} — stopping.")
+                    break
+                hdrs.append(np.frombuffer(h, dtype="<u4"))
+            else:
+                # If no header, peek one byte to see if we're at EOF
+                p = f.peek(1) if hasattr(f, "peek") else f.read(1)
+                if p == b"":
+                    break
+                if not hasattr(f, "peek"):
+                    # we consumed 1 byte; seek back
+                    f.seek(-1, 1)
+
+            # Read waveform payload
+            buf = f.read(data_bytes_per_event)
+            if len(buf) != data_bytes_per_event:
+                print(f"Warning: partial data payload at event {evt} — stopping.")
+                break
+
+            arr = np.frombuffer(buf, dtype=dtype).reshape(channels, samples_per_waveform)
+            wfs.append(arr)
+            evt += 1
+
+    if not wfs:
+        raise RuntimeError("No complete events found.")
+
+    waveforms = np.stack(wfs, axis=0)  # (E, C, N)
+    headers = (np.stack(hdrs, axis=0) if hdrs is not None else None)
+    return waveforms, headers
 
 # def parse_wf_from_binary(filename):
 #     data_list = []

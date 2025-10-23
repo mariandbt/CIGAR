@@ -68,8 +68,10 @@ def mean_baselane(final_df,params):
         
         print(channel,minrangehisto,maxrangehisto)
 
+        print(f"Creating histogram for channel {channel}...")
         hist, bins, _ = ax.hist(filtered_df[channel], bins=450, range=(0.5*min(rangedown), 0.5*max(rangeup)), #ORIGINAL 120
                                 alpha=0.7, color='blue', edgecolor='black')
+        print(f"Fitting Gaussian for channel {channel}...")
 
         # Compute bin centers
         bin_centers = (bins[:-1] + bins[1:]) / 2
@@ -92,8 +94,10 @@ def mean_baselane(final_df,params):
         try:
             # Fit the Gaussian
             popt, _ = curve_fit(gaussian, x_fit, y_fit, p0=p0)
-        except:
+            print(f"Fit parameters for {channel}: {popt} \n")
+        except Exception as e:
             popt = [0,0,0]
+            print(f"Gaussian fit failed for {channel}, using zeros. Exception: {e} \n")
             
         # Plot the Gaussian fit
         x_smooth = np.linspace(x_fit[0], x_fit[-1], 300)
@@ -136,10 +140,14 @@ def mean_baselane(final_df,params):
         ax.set_xlabel('Value')
         ax.set_ylabel('Density')
         ax.grid(True)
-        
-        # Show the plots
-    plt.show()
     
+    # Show the plots
+    print("All channels processed. Showing the plot now...")
+    plt.show(block=False)
+    input("Press Enter to exit and close the plot...")  # waits for user input
+    plt.savefig("/home/marian/baseline_histograms.png")
+    plt.close()
+
 
     return mode_baseline,hwhm_baseline
 
