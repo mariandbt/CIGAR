@@ -4,6 +4,8 @@ import re
 import struct
 import numpy as np
 from pathlib import Path
+import os
+from tqdm import tqdm
 
 def parse_txt_to_dataframe(file_path):
     data = []
@@ -223,6 +225,54 @@ def load_waveforms_until_eof(
     waveforms = np.stack(wfs, axis=0)  # (E, C, N)
     headers = (np.stack(hdrs, axis=0) if hdrs is not None else None)
     return waveforms, headers
+
+def checkWfs (run_dir, start, nfiles, nchannels, samples_per_waveform, 
+              event_header_bytes, print_headers = False):
+    
+    # CHECK WAVEFORMS' SIZES
+    print(run_dir)
+
+    for file in os.listdir(run_dir)[start:nfiles]:
+        if file.endswith(".bin"):
+            file_path = os.path.join(run_dir, file)
+        path = file_path
+
+        waveforms, headers = load_waveforms_until_eof(
+                                path,
+                                channels=nchannels,
+                                samples_per_waveform=samples_per_waveform,
+                                dtype="<f4",
+                                event_header_bytes=event_header_bytes,  # set to 0 if no per-event header
+                            )
+
+        print("Waveforms shape:", waveforms.shape)  # (num_events, 4, 500)
+        if print_headers:
+            if headers is not None:
+                print("Headers shape:", headers.shape)   # (num_events, 7) for 28 bytes
+                print("First header:", headers[0])
+    
+
+def create_df (run_dir, start, nfiles, nchannels, nevents_per_wvf, event_header_bytes):
+
+    # Initialize an empty list to store DataFrames
+    dataframes = []
+
+    # Loop through each folder and read all CSV files
+    for i, file in enumerate(tqdm(os.listdir(run_dir)[start:nfiles],desc=f"Reading {run_dir} .bin files", unit="file")):
+        if file.endswith(".bin"):
+            file_path = os.path.join(run_dir, file)
+            # print(file_path)
+            df = parse_wf_from_binary(file_path, channels = nchannels, 
+                                                n_events = nevents_per_wvf,
+                                                file_idx = i,
+                                                event_header_bytes = event_header_bytes
+                                                )  
+            dataframes.append(df)
+
+    merged_df    = pd.concat(dataframes, ignore_index=True)
+    
+    return merged_df
+
 
 # def parse_wf_from_binary(filename):
 #     data_list = []

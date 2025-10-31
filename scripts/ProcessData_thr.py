@@ -9,7 +9,7 @@ import argparse
 """
 Launch with: $ python ProcessData.py <dir_data> <outhistoname>
 """
-bars = 6.5
+bars = 1.5
 temp = 4
 
 def calculate_charge(Nphe, channel):
@@ -120,7 +120,8 @@ files_in_directory = [a_file for a_file in files_in_directory if extract_number(
 print(files_in_directory)
 
 # Initialize histograms for each channel
-bins = np.linspace(0, 10e-6, 1000)  # 300 bins between 0 and 4e-6
+bins = np.linspace(0, 10e-6, 1000) # V*s
+# bins = np.linspace(-500, 1500, 1000)  # 300 bins between 0 and 4e-6
 hist_counts = {channel: np.zeros(len(bins) - 1) for channel in channels}
 
 """
@@ -140,10 +141,15 @@ DEBUG
 # window_size = 3*0.6e-6  # 7.5bars: tau = 0.6 microseconds
 # window_size = 3*0.5e-6  # 8.5bars: tau = 0.5 microseconds
 
-window_size = 8e-6  # 4 microseconds
-step_size = 1e-6  # 0.5 microseconds
+# window_size = 8e-6  # 4 microseconds
+# step_size = 1e-6  # 0.5 microseconds
+# start_time = 0e-6  # Starting time
+# end_time = 80e-6  # End time (maximum time in the dataset)
+
+window_size = 1e-6  # 4 microseconds
+step_size = 0.01e-6  # 0.5 microseconds
 start_time = 0e-6  # Starting time
-end_time = 80e-6  # End time (maximum time in the dataset)
+end_time = 6e-6  # End time (maximum time in the dataset)
         
 
 # DCCounts = {"CH1":1.25e6*window_size, "CH2": 1.48e6*window_size, "CH3": 1.02e6*window_size, "CH4": 1.1e6*window_size}
