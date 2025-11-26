@@ -831,54 +831,26 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
     #         "CH4":(4.26e-8,-6.83e-9)  # V*s
     #         }
 
+
     elif temp == '8deg':
         # WITH AMPLIFICATION
-        # 8degs measured at 6.5bar
+        # 9degs measured at 6.5bar
             ConvPar={
-            "CH1":(3.87e-8,2.05e-8), # V*s
-            "CH2":(7.21e-8,1.38e-8), # V*s
-            "CH3":(6.46e-8,2.16e-8), # V*s
-            "CH4":(5.27e-8,1.11e-8)  # V*s
+            "CH1":(4.43e-8,1.36e-8), # V*s
+            "CH2":(6.08e-8,1.88e-9), # V*s
+            "CH3":(5.88e-8,8.24e-9), # V*s
+            "CH4":(4.59e-8,1.29e-8)  # V*s
             }
+
 
     elif temp == '9deg':
         # WITH AMPLIFICATION
         # 9degs measured at 5.5bar
             ConvPar={
-            "CH1":(5.02e-8,1.26e-8), # V*s
-            "CH2":(7.25e-8,1.54e-8), # V*s
-            "CH3":(6.80e-8,1.67e-8), # V*s
-            "CH4":(5.73e-8,1.41e-8)  # V*s
-            }
-
-    elif temp == '10.5deg':
-        # WITH AMPLIFICATION
-        # 10.5degs measured at 4.5bar
-            ConvPar={
-            "CH1":(4.71e-8,2.07e-8), # V*s
-            "CH2":(7.19e-8,1.49e-8), # V*s
-            "CH3":(6.84e-8,1.43e-8), # V*s
-            "CH4":(5.57e-8,1.69e-8)  # V*s
-            }
-
-    elif temp == '11.5deg':
-        # WITH AMPLIFICATION
-        # 11.5degs measured at 4.5bar
-            ConvPar={
-            "CH1":(5.36e-8,2.27e-8), # V*s
-            "CH2":(7.33e-8,1.80e-8), # V*s
-            "CH3":(6.77e-8,2.15e-8), # V*s
-            "CH4":(5.78e-8,1.83e-8)  # V*s
-            }
-
-    elif temp == '13deg':
-        # WITH AMPLIFICATION
-        # 11.5degs measured at 3.5bar
-            ConvPar={
-            "CH1":(5.64e-8,2.23e-8), # V*s
-            "CH2":(7.62e-8,1.82e-8), # V*s
-            "CH3":(7.11e-8,1.84e-8), # V*s
-            "CH4":(5.65e-8,2.54e-8)  # V*s
+            "CH1":(4.54e-8,1.34e-8), # V*s
+            "CH2":(6.21e-8,3.06e-10), # V*s
+            "CH3":(5.98e-8,6.91e-9), # V*s
+            "CH4":(4.77e-8,1.06e-8)  # V*s
             }
 
     # elif temp == '13deg':
@@ -939,7 +911,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
     if amplified:
         integral = charge_in_Vs
     else:
-        integral = charge_in_Vs*CHAmp[f'CH{channel}']
+        integral = charge_in_Vs*CHAmp[f'CH{channel}'][0] + CHAmp[f'CH{channel}'][1]
 
     p0, p1 = ConvPar[f'CH{channel}']
 
@@ -965,50 +937,106 @@ def CreateWfSum(wf, channels, params):
     return wf[['TIME']+ ChList +['CHSum', 'event', 'event_time', 'file_idx']]
 
 
-def BaselineCorrection(voltage_matrix: np.ndarray, window: int):
+# def BaselineCorrection(voltage_matrix: np.ndarray, window: int):
+    # """
+    # Baseline correction for waveforms using minimum standard deviation window.
+
+    # Parameters
+    # ----------
+    # voltage_matrix : np.ndarray
+    #     2D array of shape (nevents, nsamples), each row is a waveform.
+    # window : int
+    #     Sliding window size for mean/std calculation.
+
+    # Returns
+    # -------
+    # voltage_corrected : np.ndarray
+    #     Baseline-corrected waveforms, same shape as voltage_matrix.
+    # baselines : np.ndarray
+    #     Estimated baseline per waveform, shape (nevents,).
+    # min_std_indices : np.ndarray
+    #     Starting index of the lowest-variance window per waveform.
+    # """
+
+    # # (1) Moving mean
+    # mean_profile = uniform_filter1d(voltage_matrix, size=window, axis=1, mode="reflect")
+
+    # # (2) Moving variance (E[x^2] - (E[x])^2)
+    # mean_sq_profile = uniform_filter1d(voltage_matrix**2, size=window, axis=1, mode="reflect")
+    # var_profile = mean_sq_profile - mean_profile**2
+    # std_profile = np.sqrt(np.maximum(var_profile, 0))  # numerical stability
+
+    # # (3) Index of minimum std per row
+    # min_idx = np.argmin(std_profile, axis=1)
+
+    # # (4) Baseline value from mean_profile
+    # row_idx = np.arange(voltage_matrix.shape[0])
+    # baselines = mean_profile[row_idx, min_idx]
+
+    # # (5) Subtract baseline from each waveform
+    # voltage_corrected = voltage_matrix - baselines[:, None]
+
+    # # (6) Compute starting index of window (accounting for centered window)
+    # min_std_indices = np.clip(min_idx - window // 2, 0, voltage_matrix.shape[1] - 1)
+
+    # return voltage_corrected, baselines, min_std_indices
+
+def BaselineCorrection(voltage_matrix: np.ndarray, pretrigger=124, window: int = None):
     """
-    Baseline correction for waveforms using minimum standard deviation window.
+    Baseline correction using the median of each waveform.
 
     Parameters
     ----------
     voltage_matrix : np.ndarray
         2D array of shape (nevents, nsamples), each row is a waveform.
-    window : int
-        Sliding window size for mean/std calculation.
+    window : (ignored)
+        Included only for compatibility.
 
     Returns
     -------
     voltage_corrected : np.ndarray
-        Baseline-corrected waveforms, same shape as voltage_matrix.
+        Baseline-corrected waveforms.
     baselines : np.ndarray
-        Estimated baseline per waveform, shape (nevents,).
-    min_std_indices : np.ndarray
-        Starting index of the lowest-variance window per waveform.
+        Median baseline per waveform.
+    median_indices : np.ndarray
+        Dummy index array (all zeros, kept for compatibility).
     """
 
-    # (1) Moving mean
-    mean_profile = uniform_filter1d(voltage_matrix, size=window, axis=1, mode="reflect")
 
-    # (2) Moving variance (E[x^2] - (E[x])^2)
-    mean_sq_profile = uniform_filter1d(voltage_matrix**2, size=window, axis=1, mode="reflect")
-    var_profile = mean_sq_profile - mean_profile**2
-    std_profile = np.sqrt(np.maximum(var_profile, 0))  # numerical stability
+    # (1) Baseline = median of the first pretrigger samples in each waveform
+    baselines = np.median(voltage_matrix[:, :pretrigger], axis=1)
 
-    # (3) Index of minimum std per row
-    min_idx = np.argmin(std_profile, axis=1)
-
-    # (4) Baseline value from mean_profile
-    row_idx = np.arange(voltage_matrix.shape[0])
-    baselines = mean_profile[row_idx, min_idx]
-
-    # (5) Subtract baseline from each waveform
+    # (2) Subtract baseline
     voltage_corrected = voltage_matrix - baselines[:, None]
 
-    # (6) Compute starting index of window (accounting for centered window)
-    min_std_indices = np.clip(min_idx - window // 2, 0, voltage_matrix.shape[1] - 1)
+    # (3) No sliding window concept here, but return zeros to keep API identical
+    median_indices = np.zeros(voltage_matrix.shape[0], dtype=int)
 
-    return voltage_corrected, baselines, min_std_indices
+    return voltage_corrected, baselines, median_indices
 
+def FixBaselineCorrection(voltage_matrix: np.ndarray, amplified: bool, channel: int):
+
+    fixBaselines_noAmp = {'CH1': -369
+                        ,'CH2': -410
+                        ,'CH3': -350
+                        ,'CH4': -408
+                        }
+    amp_offset = 600
+    fixBaselines_Amp = {'CH1': -amp_offset
+                        ,'CH2': -amp_offset
+                        ,'CH3': -amp_offset
+                        ,'CH4': -amp_offset
+                        }
+
+    # (1) Baseline = median of the first pretrigger samples in each waveform
+    if amplified:
+        baseline = fixBaselines_Amp[f'CH{channel}']
+    else:
+        baseline = fixBaselines_noAmp[f'CH{channel}']
+    # (2) Subtract baseline
+    voltage_corrected = voltage_matrix - baseline
+
+    return voltage_corrected, baseline
 
 
 def BaselinePeakCorrection(t, matrix, baseline_th_in_s = -0.2e-6, baseline_tolerance_in_V = 0.01e-3):
