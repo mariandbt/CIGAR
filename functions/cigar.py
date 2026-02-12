@@ -832,26 +832,70 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
     #         }
 
 
-    elif temp == '8deg':
+    elif temp == '6deg':
         # WITH AMPLIFICATION
-        # 9degs measured at 6.5bar
+        # 6degs measured at 8.5bar
+        # Run118 in mV*s
             ConvPar={
-            "CH1":(4.43e-8,1.36e-8), # V*s
-            "CH2":(6.08e-8,1.88e-9), # V*s
-            "CH3":(5.88e-8,8.24e-9), # V*s
-            "CH4":(4.59e-8,1.29e-8)  # V*s
+            "CH1":(5.08e-5,5.52e-6), # V*s
+            "CH2":(6.14e-5,5.56e-6), # V*s
+            "CH3":(4.98e-5,9.28e-6), # V*s
+            "CH4":(6.7e-5,-8.48e-7)  # V*s
             }
 
+    elif temp == '7deg':
+        # WITH AMPLIFICATION
+        # 7degs measured at 7.5bar
+        # Run124 in mV*s
+            ConvPar={
+            "CH1":(6.27e-5,1.08e-5), # V*s
+            "CH2":(7.58e-5,5.93e-6), # V*s
+            "CH3":(6.25e-5,1.67e-5), # V*s
+            "CH4":(7.83e-5,-1.80e-7)  # V*s
+            }
+
+    elif temp == '8deg':
+        # WITH AMPLIFICATION
+        # 8degs measured at 6.5bar
+        # Run128 in mV*s
+            ConvPar={
+            "CH1":(6.21e-5,1.43e-5), # V*s
+            "CH2":(7.63e-5,6.72e-6), # V*s
+            "CH3":(5.75e-5,1.91e-5), # V*s
+            "CH4":(7.77e-5,7.65e-7)  # V*s
+            }
 
     elif temp == '9deg':
         # WITH AMPLIFICATION
         # 9degs measured at 5.5bar
+        # Run131 in mV*s
             ConvPar={
-            "CH1":(4.54e-8,1.34e-8), # V*s
-            "CH2":(6.21e-8,3.06e-10), # V*s
-            "CH3":(5.98e-8,6.91e-9), # V*s
-            "CH4":(4.77e-8,1.06e-8)  # V*s
+            "CH1":(6.43e-5,7.62e-6), # V*s
+            "CH2":(7.57e-5,3.92e-6), # V*s
+            "CH3":(6.27e-5,1.30e-5), # V*s
+            "CH4":(7.76e-5,2.70e-7)  # V*s
             }
+
+    # elif temp == '8deg':
+    #     # WITH AMPLIFICATION
+    #     # 8degs measured at 6.5bar
+    #         ConvPar={
+    #         "CH1":(4.43e-8,1.36e-8), # V*s
+    #         "CH2":(6.08e-8,1.88e-9), # V*s
+    #         "CH3":(5.88e-8,8.24e-9), # V*s
+    #         "CH4":(4.59e-8,1.29e-8)  # V*s
+    #         }
+
+
+    # elif temp == '9deg':
+    #     # WITH AMPLIFICATION
+    #     # 9degs measured at 5.5bar
+    #         ConvPar={
+    #         "CH1":(4.54e-8,1.34e-8), # V*s
+    #         "CH2":(6.21e-8,3.06e-10), # V*s
+    #         "CH3":(5.98e-8,6.91e-9), # V*s
+    #         "CH4":(4.77e-8,1.06e-8)  # V*s
+    #         }
 
     # elif temp == '13deg':
     #     # 13degs measured at atmospheric pressure
@@ -903,7 +947,7 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
         print('Sorry sweetie, we don\'t have callibration for that temperature yet :(')
 
     
-    # Calculate averages like your example
+    # Calculate averages 
     avg_p0 = sum(p[0] for p in ConvPar.values()) / len(ConvPar)
     avg_p1 = sum(p[1] for p in ConvPar.values()) / len(ConvPar)
     ConvPar['CHSum'] = (avg_p0, avg_p1)
@@ -1261,17 +1305,17 @@ def PrintTotalSpectrum(run, charge_df, channels = [1, 2, 3, 4], pes = True, ampl
 def CalculateEfficiency(detected_pes_dict, correction_file = '20250210_LightCorrection.csv', poisson_aprox = False):
     
     reference_plot = {2.004: 1.075e5,
-                  2.512: 1.088e5,
-                  2.985: 1.122e5,
-                  3.493: 1.180e5,
-                  4.000: 1.233e5,
-                  4.507: 1.285e5,
-                  4.997: 1.325e5,
-                  6.011: 1.526e5,
-                  6.974: 1.727e5,
-                  8.004: 1.903e5,
-                  8.967: 2.072e5,
-                  9.965: 2.183e5}
+                        2.512: 1.088e5,
+                        2.985: 1.122e5,
+                        3.493: 1.180e5,
+                        4.000: 1.233e5,
+                        4.507: 1.285e5,
+                        4.997: 1.325e5,
+                        6.011: 1.526e5,
+                        6.974: 1.727e5,
+                        8.004: 1.903e5,
+                        8.967: 2.072e5,
+                        9.965: 2.183e5}
 
     # Extract X and Y values and sort them
     x = np.array(sorted(reference_plot.keys()))
