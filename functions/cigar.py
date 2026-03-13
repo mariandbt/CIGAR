@@ -827,6 +827,61 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
             "CH3":(5.52e-5,-1.26e-5), # mV*s
             "CH4":(7.49e-5,-4.83e-5)  # mV*s
             }
+
+    elif temp == '9deg':
+        # WITH AMPLIFICATION
+        # 9degs measured at 5.5bar
+        # Run178 in mV*s
+            ConvPar={
+            "CH1":(6.30e-5,-4.27e-5), # mV*s
+            "CH2":(7.37e-5,-2.94e-5), # mV*s
+            "CH3":(5.51e-5,-1.34e-5), # mV*s
+            "CH4":(7.53e-5,-5.09e-5)  # mV*s
+            }
+
+    elif temp == '10deg':
+        # WITH AMPLIFICATION
+        # 10degs measured at 4.5bar
+        # Run180 in mV*s
+            ConvPar={
+            "CH1":(6.38e-5,-4.49e-5), # mV*s
+            "CH2":(7.46e-5,-3.31e-5), # mV*s
+            "CH3":(5.67e-5,-1.81e-5), # mV*s
+            "CH4":(7.57e-5,-5.43e-5)  # mV*s
+            }
+
+    elif temp == '11deg':
+        # WITH AMPLIFICATION
+        # 11degs measured at 3.5bar
+        # Run182 in mV*s
+            ConvPar={
+            "CH1":(6.47e-5,-4.94e-5), # mV*s
+            "CH2":(7.48e-5,-3.54e-5), # mV*s
+            "CH3":(6.03e-5,-2.66e-5), # mV*s
+            "CH4":(7.71e-5,-5.90e-5)  # mV*s
+            }
+
+    elif temp == '12deg':
+        # WITH AMPLIFICATION
+        # 12degs measured at 2.5bar
+        # Run184 in mV*s
+            ConvPar={
+            "CH1":(6.44e-5,-4.88e-5), # mV*s
+            "CH2":(7.47e-5,-3.75e-5), # mV*s
+            "CH3":(5.63e-5,-1.99e-5), # mV*s
+            "CH4":(7.54e-5,-5.84e-5)  # mV*s
+            }
+
+    elif temp == '13.5deg':
+        # WITH AMPLIFICATION
+        # 13.5degs measured at 1.5bar
+        # Run186 in mV*s
+            ConvPar={
+            "CH1":(6.45e-5,-5.38e-5), # mV*s
+            "CH2":(7.38e-5,-4.20e-5), # mV*s
+            "CH3":(6.01e-5,-3.09e-5), # mV*s
+            "CH4":(7.46e-5,-6.20e-5)  # mV*s
+            }
     # Runs 172-186 *******************************************************************************
 
 
