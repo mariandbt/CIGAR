@@ -774,7 +774,7 @@ def ShiftWaveformToPeak(t, matrix):
 #     photoelectrons = (integral - p1) / p0
 #     return photoelectrons
 
-def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
+def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None):
 
     # # integral is in V*us
     # CHAmp={
@@ -795,10 +795,12 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
         }
 
     # Runs 70-99 (Xe) *******************************************************************************
-    elif temp == '8deg':
-            # WITH AMPLIFICATION
-            # 8degs measured at 8.5bar
-            # Run73 in mV*s
+    if gas == 'Xe':
+    
+        if temp == '8deg':
+                # WITH AMPLIFICATION
+                # 8degs measured at 8.5bar
+                # Run73 in mV*s
                 ConvPar={
                 "CH1":(5.08e-5,-3.46e-5), # mV*s
                 "CH2":(6.68e-5,-3.47e-5), # mV*s
@@ -806,10 +808,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(4.84e-5,-1.84e-5)  # mV*s
                 }
 
-    elif temp == '10deg':
-            # WITH AMPLIFICATION
-            # 10degs measured at 7.5bar
-            # Run76 in mV*s
+        elif temp == '10deg':
+                # WITH AMPLIFICATION
+                # 10degs measured at 7.5bar
+                # Run76 in mV*s
                 ConvPar={
                 "CH1":(5.21e-5,-3.84e-5), # mV*s
                 "CH2":(6.70e-5,-3.70e-5), # mV*s
@@ -817,10 +819,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(4.90e-5,-1.90e-5)  # mV*s
                 }
 
-    elif temp == '11.5deg':
-            # WITH AMPLIFICATION
-            # 11.5degs measured at 4.5bar
-            # Run104 in mV*s
+        elif temp == '11.5deg':
+                # WITH AMPLIFICATION
+                # 11.5degs measured at 4.5bar
+                # Run104 in mV*s
                 ConvPar={
                 "CH1":(5.63e-5,1.83e-5), # mV*s
                 "CH2":(7.18e-5,1.97e-5), # mV*s
@@ -828,10 +830,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(5.23e-5,1.45e-5)  # mV*s
                 }
 
-    elif temp == '12deg':
-            # WITH AMPLIFICATION
-            # 12degs measured at 6.5bar
-            # Run81 in mV*s
+        elif temp == '12deg':
+                # WITH AMPLIFICATION
+                # 12degs measured at 6.5bar
+                # Run81 in mV*s
                 ConvPar={
                 "CH1":(5.29e-5,-4.16e-5), # mV*s
                 "CH2":(6.47e-5,-2.68e-5), # mV*s
@@ -839,10 +841,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(5.71e-5,6.24e-5)  # mV*s
                 }
 
-    elif temp == '13deg':
-            # WITH AMPLIFICATION
-            # 13degs measured at 5.5bar
-            # Run84 in mV*s
+        elif temp == '13deg':
+                # WITH AMPLIFICATION
+                # 13degs measured at 5.5bar
+                # Run84 in mV*s
                 ConvPar={
                 "CH1":(5.60e-5,3.37e-6), # mV*s
                 "CH2":(7.10e-5,1.99e-5), # mV*s
@@ -850,10 +852,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(5.04e-5,1.79e-5)  # mV*s
                 }
 
-    elif temp == '13v2deg':
-            # WITH AMPLIFICATION
-            # 13degs measured at 3.5bar
-            # Run107 in mV*s
+        elif temp == '13v2deg':
+                # WITH AMPLIFICATION
+                # 13degs measured at 3.5bar
+                # Run107 in mV*s
                 ConvPar={
                 "CH1":(5.72e-5,-2.24e-6), # mV*s
                 "CH2":(7.01e-5,1.82e-5), # mV*s
@@ -861,10 +863,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(5.15e-5,1.41e-5)  # mV*s
                 }
 
-    elif temp == '13v3deg':
-            # WITH AMPLIFICATION
-            # 13degs measured at 2.5bar
-            # Run109 in mV*s
+        elif temp == '13v3deg':
+                # WITH AMPLIFICATION
+                # 13degs measured at 2.5bar
+                # Run109 in mV*s
                 ConvPar={
                 "CH1":(5.60e-5,2.89e-7), # mV*s
                 "CH2":(6.61e-5,-3.61e-5), # mV*s
@@ -872,10 +874,10 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
                 "CH4":(7.12e-5,-2.23e-6)  # mV*s
                 }
 
-    elif temp == '14deg':
-            # WITH AMPLIFICATION
-            # 14degs measured at 1.5bar
-            # Run114 in mV*s
+        elif temp == '14deg':
+                # WITH AMPLIFICATION
+                # 14degs measured at 1.5bar
+                # Run114 in mV*s
                 ConvPar={
                 "CH1":(5.93e-5,-1.14e-5), # mV*s
                 "CH2":(6.64e-5,-4.25e-5), # mV*s
@@ -887,95 +889,96 @@ def ChargeToPes(charge_in_Vs, channel, temp = 2, amplified = False, CHAmp=None):
     # Runs 60-99 (Xe) *******************************************************************************
 
 
-    # # Runs 172-186 (Ar) *******************************************************************************
-    # elif temp == '6deg':
-    #     # WITH AMPLIFICATION
-    #     # 6degs measured at 8.5bar
-    #     # Run172 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.05e-5,-3.70e-5), # mV*s
-    #         "CH2":(7.28e-5,-2.37e-5), # mV*s
-    #         "CH3":(5.54e-5,-1.41e-5), # mV*s
-    #         "CH4":(7.45e-5,-4.51e-5)  # mV*s
-    #         }
+    # Runs 172-186 (Ar) *******************************************************************************
+    if gas == 'Ar':
+        if temp == '6deg':
+            # WITH AMPLIFICATION
+            # 6degs measured at 8.5bar
+            # Run172 in mV*s
+                ConvPar={
+                "CH1":(6.05e-5,-3.70e-5), # mV*s
+                "CH2":(7.28e-5,-2.37e-5), # mV*s
+                "CH3":(5.54e-5,-1.41e-5), # mV*s
+                "CH4":(7.45e-5,-4.51e-5)  # mV*s
+                }
 
-    # elif temp == '7deg':
-    #     # WITH AMPLIFICATION
-    #     # 7degs measured at 7.5bar
-    #     # Run174 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.11e-5,-3.92e-5), # mV*s
-    #         "CH2":(7.23e-5,-2.43e-5), # mV*s
-    #         "CH3":(5.34e-5,-1.02e-5), # mV*s
-    #         "CH4":(7.53e-5,-4.85e-5)  # mV*s
-    #         }
+        elif temp == '7deg':
+            # WITH AMPLIFICATION
+            # 7degs measured at 7.5bar
+            # Run174 in mV*s
+                ConvPar={
+                "CH1":(6.11e-5,-3.92e-5), # mV*s
+                "CH2":(7.23e-5,-2.43e-5), # mV*s
+                "CH3":(5.34e-5,-1.02e-5), # mV*s
+                "CH4":(7.53e-5,-4.85e-5)  # mV*s
+                }
 
-    # elif temp == '8deg':
-    #     # WITH AMPLIFICATION
-    #     # 8degs measured at 6.5bar
-    #     # Run176 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.27e-5,-4.16e-5), # mV*s
-    #         "CH2":(7.38e-5,-2.79e-5), # mV*s
-    #         "CH3":(5.52e-5,-1.26e-5), # mV*s
-    #         "CH4":(7.49e-5,-4.83e-5)  # mV*s
-    #         }
+        elif temp == '8deg':
+            # WITH AMPLIFICATION
+            # 8degs measured at 6.5bar
+            # Run176 in mV*s
+                ConvPar={
+                "CH1":(6.27e-5,-4.16e-5), # mV*s
+                "CH2":(7.38e-5,-2.79e-5), # mV*s
+                "CH3":(5.52e-5,-1.26e-5), # mV*s
+                "CH4":(7.49e-5,-4.83e-5)  # mV*s
+                }
 
-    # elif temp == '9deg':
-    #     # WITH AMPLIFICATION
-    #     # 9degs measured at 5.5bar
-    #     # Run178 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.30e-5,-4.27e-5), # mV*s
-    #         "CH2":(7.37e-5,-2.94e-5), # mV*s
-    #         "CH3":(5.51e-5,-1.34e-5), # mV*s
-    #         "CH4":(7.53e-5,-5.09e-5)  # mV*s
-    #         }
+        elif temp == '9deg':
+            # WITH AMPLIFICATION
+            # 9degs measured at 5.5bar
+            # Run178 in mV*s
+                ConvPar={
+                "CH1":(6.30e-5,-4.27e-5), # mV*s
+                "CH2":(7.37e-5,-2.94e-5), # mV*s
+                "CH3":(5.51e-5,-1.34e-5), # mV*s
+                "CH4":(7.53e-5,-5.09e-5)  # mV*s
+                }
 
-    # elif temp == '10deg':
-    #     # WITH AMPLIFICATION
-    #     # 10degs measured at 4.5bar
-    #     # Run180 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.38e-5,-4.49e-5), # mV*s
-    #         "CH2":(7.46e-5,-3.31e-5), # mV*s
-    #         "CH3":(5.67e-5,-1.81e-5), # mV*s
-    #         "CH4":(7.57e-5,-5.43e-5)  # mV*s
-    #         }
+        elif temp == '10deg':
+            # WITH AMPLIFICATION
+            # 10degs measured at 4.5bar
+            # Run180 in mV*s
+                ConvPar={
+                "CH1":(6.38e-5,-4.49e-5), # mV*s
+                "CH2":(7.46e-5,-3.31e-5), # mV*s
+                "CH3":(5.67e-5,-1.81e-5), # mV*s
+                "CH4":(7.57e-5,-5.43e-5)  # mV*s
+                }
 
-    # elif temp == '11deg':
-    #     # WITH AMPLIFICATION
-    #     # 11degs measured at 3.5bar
-    #     # Run182 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.47e-5,-4.94e-5), # mV*s
-    #         "CH2":(7.48e-5,-3.54e-5), # mV*s
-    #         "CH3":(6.03e-5,-2.66e-5), # mV*s
-    #         "CH4":(7.71e-5,-5.90e-5)  # mV*s
-    #         }
+        elif temp == '11deg':
+            # WITH AMPLIFICATION
+            # 11degs measured at 3.5bar
+            # Run182 in mV*s
+                ConvPar={
+                "CH1":(6.47e-5,-4.94e-5), # mV*s
+                "CH2":(7.48e-5,-3.54e-5), # mV*s
+                "CH3":(6.03e-5,-2.66e-5), # mV*s
+                "CH4":(7.71e-5,-5.90e-5)  # mV*s
+                }
 
-    # elif temp == '12deg':
-    #     # WITH AMPLIFICATION
-    #     # 12degs measured at 2.5bar
-    #     # Run184 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.44e-5,-4.88e-5), # mV*s
-    #         "CH2":(7.47e-5,-3.75e-5), # mV*s
-    #         "CH3":(5.63e-5,-1.99e-5), # mV*s
-    #         "CH4":(7.54e-5,-5.84e-5)  # mV*s
-    #         }
+        elif temp == '12deg':
+            # WITH AMPLIFICATION
+            # 12degs measured at 2.5bar
+            # Run184 in mV*s
+                ConvPar={
+                "CH1":(6.44e-5,-4.88e-5), # mV*s
+                "CH2":(7.47e-5,-3.75e-5), # mV*s
+                "CH3":(5.63e-5,-1.99e-5), # mV*s
+                "CH4":(7.54e-5,-5.84e-5)  # mV*s
+                }
 
-    # elif temp == '13.5deg':
-    #     # WITH AMPLIFICATION
-    #     # 13.5degs measured at 1.5bar
-    #     # Run186 in mV*s
-    #         ConvPar={
-    #         "CH1":(6.45e-5,-5.38e-5), # mV*s
-    #         "CH2":(7.38e-5,-4.20e-5), # mV*s
-    #         "CH3":(6.01e-5,-3.09e-5), # mV*s
-    #         "CH4":(7.46e-5,-6.20e-5)  # mV*s
-    #         }
-    # # Runs 172-186 (Ar) *******************************************************************************
+        elif temp == '13.5deg':
+            # WITH AMPLIFICATION
+            # 13.5degs measured at 1.5bar
+            # Run186 in mV*s
+                ConvPar={
+                "CH1":(6.45e-5,-5.38e-5), # mV*s
+                "CH2":(7.38e-5,-4.20e-5), # mV*s
+                "CH3":(6.01e-5,-3.09e-5), # mV*s
+                "CH4":(7.46e-5,-6.20e-5)  # mV*s
+                }
+    # Runs 172-186 (Ar) *******************************************************************************
 
 
 
