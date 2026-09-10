@@ -11,6 +11,7 @@ from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 from scipy.ndimage import uniform_filter1d
+from scipy.special import gammaln
 
 import re
 import struct
@@ -360,6 +361,46 @@ def crystalball_fit(x, A, beta, m, loc, scale, tail = 'left'):
 def gaussian(x, A, mu, sigma):
     """Define a Gaussian function."""
     return A*(1.0 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+
+def poisson_continuous(x, A, mu):
+    """
+    Continuous generalization of the Poisson pmf (n! -> Gamma(x+1) via
+    gammaln), so it can be fit to a histogram of a rescaled count variable
+    (e.g. counts/time) that isn't integer-valued, not just raw counts.
+    Support is x >= 0, matching the Poisson; returns 0 elsewhere.
+    """
+    x = np.asarray(x, dtype=float)
+    out = np.zeros_like(x)
+    valid = x >= 0
+    out[valid] = A * np.exp(x[valid] * np.log(mu) - mu - gammaln(x[valid] + 1))
+    return out
+
+def generalized_poisson_continuous(x, A, theta, lam):
+    """
+    Continuous generalization (n! -> Gamma(x+1)) of the Generalized Poisson
+    / Borel-Poisson pmf (Consul & Jain 1973), used to model correlated
+    noise (optical crosstalk / afterpulsing) in SiPM dark-count spectra
+    (Vinogradov 2012): a Poisson(theta) number of primary triggers, each
+    independently spawning a Borel(lam)-distributed crosstalk/afterpulse
+    cascade. lam is the (mean) per-pulse crosstalk probability, 0 <= lam < 1
+    for the process to stay subcritical (finite mean/variance); lam = 0
+    recovers poisson_continuous(x, A, theta) exactly.
+
+    Mean = theta / (1 - lam), Variance = theta / (1 - lam)**3, so the
+    variance-to-mean ratio (excess noise factor) is 1 / (1 - lam)**2 > 1 -
+    the distribution is super-Poissonian by construction, with the extra
+    spread concentrated in the tail rather than symmetric broadening.
+    Support is x >= 0; returns 0 elsewhere.
+    """
+    x = np.asarray(x, dtype=float)
+    out = np.zeros_like(x)
+    valid = x >= 0
+    xv = x[valid]
+    shifted = theta + xv * lam   # always > 0 here since theta, lam, xv >= 0
+    log_f = (np.log(A) + np.log(theta) + (xv - 1) * np.log(shifted)
+             - shifted - gammaln(xv + 1))
+    out[valid] = np.exp(log_f)
+    return out
 
 def sum_of_gaussians(x, *params):
     """
@@ -785,6 +826,8 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
 
     # CALLIBRATION TAKEN AMPLIFIED
 
+    ConvPar = None
+
     if temp == 'room':
         # Samuele's (20250220) RoomTemp
         ConvPar={
@@ -794,7 +837,7 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
         "CH4":(6.53e-8,-1.38e-8)  # V*s
         }
 
-    # Runs 70-99 (Xe) *******************************************************************************
+    # Runs 70-115 (Xe) *******************************************************************************
     if gas == 'Xe':
     
         if temp == '8deg':
@@ -877,7 +920,7 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
         elif temp == '14deg':
                 # WITH AMPLIFICATION
                 # 14degs measured at 1.5bar
-                # Run114 in mV*s
+                # Run115 in mV*s
                 ConvPar={
                 "CH1":(5.93e-5,-1.14e-5), # mV*s
                 "CH2":(6.64e-5,-4.25e-5), # mV*s
@@ -886,11 +929,11 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 }
 
 
-    # Runs 60-99 (Xe) *******************************************************************************
+    # Runs 70-115 (Xe) *******************************************************************************
 
 
     # Runs 172-186 (Ar) *******************************************************************************
-    if gas == 'Ar':
+    elif gas == 'Ar':
         if temp == '6deg':
             # WITH AMPLIFICATION
             # 6degs measured at 8.5bar

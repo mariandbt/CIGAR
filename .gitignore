@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.ipynb.tmp.*
+.claude/
+.vscode/
+.git.corrupt-backup/
+data/
+ProcessedWaveforms/
+slurms/errors/
+notebooks/*.npy
+scripts/*.png
