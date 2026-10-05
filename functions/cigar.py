@@ -10,7 +10,7 @@ import scipy
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
-from scipy.ndimage import uniform_filter1d
+from scipy.ndimage import uniform_filter1d, gaussian_filter1d
 from scipy.special import gammaln
 
 import re
@@ -429,6 +429,149 @@ def sum_of_gaussians(x, *params):
     
     return result
 
+
+def FingerSeeds(charge, n_peaks, hist_range=None, oversample=4, min_period_bins=4, plot=False, title=None):
+    """
+    Initial guesses for the finger-plot Gaussian means (pedestal, 1 PE, 2 PE, ...).
+
+    The fingers are (nearly) equally spaced, so instead of hunting for each
+    peak with find_peaks the whole histogram is used to find the spacing:
+
+    1. HILL   - the histogram blurred so much that the fingers vanish: the
+                smooth envelope the fingers sit on.
+    2. RIPPLE - (smoothed histogram - hill) / sqrt(hill): what the fingers
+                add on top of the hill, in units of statistical fluctuation.
+                Crests (> 0) are fingers, also those that only appear as a
+                shoulder in the raw histogram.
+    3. GAIN   - a rough period from the ripple's FFT, then refined by sliding
+                a comb mu_1 + k*G (1 PE, 2 PE, 3 PE) over the ripple and keeping
+                the (mu_1, G) whose teeth land on the most ripple. The pedestal
+                is left out on purpose: it sits ~0.8 G below 1 PE, not 1 G, and
+                including it shrinks the gain on poorly resolved channels.
+    4. NUDGE  - each PE tooth moves to a ripple crest within +-G/4 if there is
+                one; otherwise it stays on the comb. The pedestal is the
+                ripple crest between 1.3 G and 0.4 G below 1 PE.
+
+    plot=True draws these steps (hill, ripple + comb, nudges) in a new figure,
+    shown at the next plt.show().
+
+    Returns
+    -------
+    seeds : np.ndarray, shape (n_peaks,)
+        Initial mu for each Gaussian, pedestal first.
+    gain : float
+        Estimated finger spacing (same units as charge).
+    """
+    q = np.asarray(charge)[np.isfinite(charge)]
+    if hist_range is None:
+        hist_range = (np.percentile(q, 0.5), np.percentile(q, 99))
+    nb   = oversample * int(0.5 * np.sqrt(len(q)))
+    h, b = np.histogram(q, bins=nb, range=hist_range)
+    x    = 0.5 * (b[1:] + b[:-1])
+    bw   = b[1] - b[0]
+
+    # 1-2. hill and ripple
+    hs     = gaussian_filter1d(h.astype(float), oversample * 0.75)
+    hill   = gaussian_filter1d(h.astype(float), nb / 12)
+    ripple = (hs - hill) / np.sqrt(np.maximum(hill, 1.0))
+    ripple -= ripple.mean()
+
+    # 3a. rough gain = dominant period of the ripple (zero-padded FFT)
+    nfft  = 16 * nb
+    P     = np.abs(np.fft.rfft(ripple * np.hanning(nb), nfft))**2
+    per   = nfft / np.maximum(np.arange(len(P)), 1e-9)   # period in fine bins
+    ok    = (per >= min_period_bins * oversample) & (per <= nb / 2.5)
+    gain0 = per[np.flatnonzero(ok)[np.argmax(P[ok])]] * bw
+
+    # rough 1 PE position: FFT phase gives the comb teeth, the tooth nearest 0 is the pedestal
+    phase   = np.angle(np.sum(ripple * np.exp(-2j * np.pi * (x - x[0]) / gain0)))
+    tooth   = x[0] - phase / (2 * np.pi) * gain0
+    mu_ped0 = tooth - gain0 * np.round(tooth / gain0)
+    if mu_ped0 < x[0] - 0.5 * gain0:
+        mu_ped0 += gain0
+    mu1_0 = mu_ped0 + gain0
+
+    # 3b. refine (mu_1, G) on the PE teeth only (1, 2, 3 PE), pedestal excluded
+    n_teeth = int(np.clip(n_peaks - 1, 1, 3))
+    G_grid  = gain0 * np.linspace(0.75, 1.35, 121)
+    m_grid  = mu1_0 + gain0 * np.linspace(-0.5, 0.5, 101)
+    k       = np.arange(n_teeth)
+    teeth   = m_grid[:, None, None] + G_grid[None, :, None] * k
+    score   = np.interp(teeth, x, ripple).sum(axis=2)
+    im, ig  = np.unravel_index(np.argmax(score), score.shape)
+    mu1, gain = m_grid[im], G_grid[ig]
+
+    def crest(lo, hi, positive=True):
+        """Highest ripple crest strictly inside (lo, hi), or None."""
+        w = np.flatnonzero((x > lo) & (x < hi))
+        if len(w) < 3:
+            return None
+        i = w[np.argmax(ripple[w])]
+        if i in (w[0], w[-1]) or (positive and ripple[i] <= 0):
+            return None
+        return x[i]
+
+    # 4. nudge each PE tooth to a nearby ripple crest; pedestal searched separately
+    comb  = np.r_[mu1 - gain, mu1 + gain * np.arange(n_peaks - 1)]
+    seeds = comb.copy()
+    found = np.zeros(n_peaks, bool)
+    for j in range(1, n_peaks):
+        c = crest(comb[j] - gain / 4, comb[j] + gain / 4)
+        if c is not None:
+            seeds[j], found[j] = c, True
+    # the pedestal is often a small bump on the rising side of the hill, so its
+    # ripple crest can be negative: accept any local maximum there
+    ped = crest(seeds[1] - 1.3 * gain, seeds[1] - 0.4 * gain, positive=False)
+    seeds[0] = ped if ped is not None else max(seeds[1] - gain, x[0])
+
+    # returned gain: straight line through the confirmed PE crests, when there are enough
+    if found.sum() >= 2:
+        g_fit = np.polyfit(np.flatnonzero(found), seeds[found], 1)[0]
+        if 0.75 * gain < g_fit < 1.25 * gain:
+            gain = g_fit
+
+    if plot:
+        fig, axs = plt.subplots(3, 1, figsize=(14, 13), sharex=True, dpi=100)
+        if title:
+            fig.suptitle(title)
+        ax = axs[0]
+        ax.plot(x, h, color='gray', alpha=0.4, label='histogram (fine bins)')
+        ax.plot(x, hs, color='C0', lw=2, label='lightly smoothed')
+        ax.plot(x, hill, color='C2', lw=4, label='hill (fingers blurred away)')
+        ax.set_title('1. Hill: the smooth shape the fingers sit on')
+        ax.set_ylabel('Counts')
+        ax.legend(fontsize=14)
+
+        ax = axs[1]
+        ax.plot(x, ripple, color='k', lw=1.5)
+        ax.fill_between(x, ripple, 0, where=ripple > 0, color='C1', alpha=0.4, label='crests = fingers')
+        ax.fill_between(x, ripple, 0, where=ripple < 0, color='C0', alpha=0.2, label='valleys')
+        ax.axhline(0, color='k', lw=0.8)
+        for j, c in enumerate(comb):
+            ax.axvline(c, color='red', ls='--', lw=1.5, label='comb teeth' if j == 0 else None)
+            ax.text(c, ax.get_ylim()[1], f' {j}', color='red', va='top', fontsize=14)
+        ax.set_title(f'2. Ripple = (smoothed - hill)/$\\sqrt{{hill}}$, comb with G = {gain:.3g}')
+        ax.set_ylabel(r'Ripple [$\sigma$]')
+        ax.legend(fontsize=14, loc='upper right')
+
+        ax = axs[2]
+        ax.plot(x, hs, color='C0', lw=2)
+        y_comb = np.interp(comb, x, hs)
+        y_seed = np.interp(seeds, x, hs)
+        ax.plot(comb, y_comb, 'v', color='gray', ms=12, label='comb tooth')
+        for c, yc, s, ys in zip(comb, y_comb, seeds, y_seed):
+            if abs(s - c) > bw:
+                ax.annotate('', xy=(s, ys), xytext=(c, yc),
+                            arrowprops=dict(arrowstyle='->', color='k', lw=1.5))
+        ax.plot(seeds, y_seed, 'o', color='red', ms=12, label='initial guess (seed)')
+        ax.set_title('3. Nudge: each tooth moves onto a nearby crest (if there is one)')
+        ax.set_ylabel('Counts')
+        ax.set_xlabel('Charge')
+        ax.legend(fontsize=14)
+        plt.tight_layout()   # not shown here: appears at the caller's next plt.show()
+
+    return seeds, gain
+
 # def sum_of_gaussians(x, *params, bin_width=1.0, normalized=False):
 #     """
 #     Returns the sum of multiple Gaussian functions.
@@ -815,7 +958,7 @@ def ShiftWaveformToPeak(t, matrix):
 #     photoelectrons = (integral - p1) / p0
 #     return photoelectrons
 
-def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None):
+def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None, version='v2'):
 
     # # integral is in V*us
     # CHAmp={
@@ -829,20 +972,26 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
     ConvPar = None
 
     if temp == 'room':
-        # Samuele's (20250220) RoomTemp
-        ConvPar={
-        "CH1":(6.81e-8,-1.26e-8), # V*s
-        "CH2":(7.06e-8,-1.56e-8), # V*s
-        "CH3":(6.36e-8,-1.23e-8), # V*s
-        "CH4":(6.53e-8,-1.38e-8)  # V*s
-        }
+        if version == 'v1':
+            # Samuele's (20250220) RoomTemp
+            ConvPar={
+            "CH1":(6.81e-8,-1.26e-8), # V*s
+            "CH2":(7.06e-8,-1.56e-8), # V*s
+            "CH3":(6.36e-8,-1.23e-8), # V*s
+            "CH4":(6.53e-8,-1.38e-8)  # V*s
+            }
+
+        elif version == 'v2':
+            # TODO: fill in the v2 calibration
+            ConvPar = None
 
     # Runs 70-115 (Xe) *******************************************************************************
     if gas == 'Xe':
     
         if temp == '8deg':
-                # WITH AMPLIFICATION
-                # 8degs measured at 8.5bar
+            # WITH AMPLIFICATION
+            # 8degs measured at 8.5bar
+            if version == 'v1':
                 # Run73 in mV*s
                 ConvPar={
                 "CH1":(5.08e-5,-3.46e-5), # mV*s
@@ -851,9 +1000,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(4.84e-5,-1.84e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '10deg':
-                # WITH AMPLIFICATION
-                # 10degs measured at 7.5bar
+            # WITH AMPLIFICATION
+            # 10degs measured at 7.5bar
+            if version == 'v1':
                 # Run76 in mV*s
                 ConvPar={
                 "CH1":(5.21e-5,-3.84e-5), # mV*s
@@ -862,9 +1016,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(4.90e-5,-1.90e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '11.5deg':
-                # WITH AMPLIFICATION
-                # 11.5degs measured at 4.5bar
+            # WITH AMPLIFICATION
+            # 11.5degs measured at 4.5bar
+            if version == 'v1':
                 # Run104 in mV*s
                 ConvPar={
                 "CH1":(5.63e-5,1.83e-5), # mV*s
@@ -873,9 +1032,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(5.23e-5,1.45e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '12deg':
-                # WITH AMPLIFICATION
-                # 12degs measured at 6.5bar
+            # WITH AMPLIFICATION
+            # 12degs measured at 6.5bar
+            if version == 'v1':
                 # Run81 in mV*s
                 ConvPar={
                 "CH1":(5.29e-5,-4.16e-5), # mV*s
@@ -884,9 +1048,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(5.71e-5,6.24e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '13deg':
-                # WITH AMPLIFICATION
-                # 13degs measured at 5.5bar
+            # WITH AMPLIFICATION
+            # 13degs measured at 5.5bar
+            if version == 'v1':
                 # Run84 in mV*s
                 ConvPar={
                 "CH1":(5.60e-5,3.37e-6), # mV*s
@@ -895,9 +1064,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(5.04e-5,1.79e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '13v2deg':
-                # WITH AMPLIFICATION
-                # 13degs measured at 3.5bar
+            # WITH AMPLIFICATION
+            # 13degs measured at 3.5bar
+            if version == 'v1':
                 # Run107 in mV*s
                 ConvPar={
                 "CH1":(5.72e-5,-2.24e-6), # mV*s
@@ -906,9 +1080,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(5.15e-5,1.41e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '13v3deg':
-                # WITH AMPLIFICATION
-                # 13degs measured at 2.5bar
+            # WITH AMPLIFICATION
+            # 13degs measured at 2.5bar
+            if version == 'v1':
                 # Run109 in mV*s
                 ConvPar={
                 "CH1":(5.60e-5,2.89e-7), # mV*s
@@ -917,9 +1096,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.12e-5,-2.23e-6)  # mV*s
                 }
 
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
+
         elif temp == '14deg':
-                # WITH AMPLIFICATION
-                # 14degs measured at 1.5bar
+            # WITH AMPLIFICATION
+            # 14degs measured at 1.5bar
+            if version == 'v1':
                 # Run115 in mV*s
                 ConvPar={
                 "CH1":(5.93e-5,-1.14e-5), # mV*s
@@ -927,6 +1111,10 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH3":(4.96e-5,1.74e-5), # mV*s
                 "CH4":(7.33e-5,-1.25e-5)  # mV*s
                 }
+
+            elif version == 'v2':
+                # TODO: fill in the v2 calibration
+                ConvPar = None
 
 
     # Runs 70-115 (Xe) *******************************************************************************
@@ -937,7 +1125,8 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
         if temp == '6deg':
             # WITH AMPLIFICATION
             # 6degs measured at 8.5bar
-            # Run172 in mV*s
+            if version == 'v1':
+                # Run172 in mV*s
                 ConvPar={
                 "CH1":(6.05e-5,-3.70e-5), # mV*s
                 "CH2":(7.28e-5,-2.37e-5), # mV*s
@@ -945,10 +1134,21 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.45e-5,-4.51e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run172 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.59e-5,2.05e-7), # mV*s
+                "CH2":(7.91e-5,7.26e-7), # mV*s
+                "CH3":(6.99e-5,-1.24e-5), # mV*s
+                "CH4":(8.03e-5,9.75e-6)  # mV*s
+                }
+
         elif temp == '7deg':
             # WITH AMPLIFICATION
             # 7degs measured at 7.5bar
-            # Run174 in mV*s
+            if version == 'v1':
+                # Run174 in mV*s
                 ConvPar={
                 "CH1":(6.11e-5,-3.92e-5), # mV*s
                 "CH2":(7.23e-5,-2.43e-5), # mV*s
@@ -956,10 +1156,21 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.53e-5,-4.85e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run174 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.88e-5,-2.93e-6), # mV*s
+                "CH2":(8.06e-5,-3.61e-7), # mV*s
+                "CH3":(6.39e-5,-1.87e-6), # mV*s
+                "CH4":(8.50e-5,1.10e-6)  # mV*s
+                }
+
         elif temp == '8deg':
             # WITH AMPLIFICATION
             # 8degs measured at 6.5bar
-            # Run176 in mV*s
+            if version == 'v1':
+                # Run176 in mV*s
                 ConvPar={
                 "CH1":(6.27e-5,-4.16e-5), # mV*s
                 "CH2":(7.38e-5,-2.79e-5), # mV*s
@@ -967,10 +1178,21 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.49e-5,-4.83e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run176 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.93e-5,1.56e-7), # mV*s
+                "CH2":(8.22e-5,-7.20e-7), # mV*s
+                "CH3":(6.44e-5,3.62e-7), # mV*s
+                "CH4":(8.71e-5,-2.67e-6)  # mV*s
+                }
+
         elif temp == '9deg':
             # WITH AMPLIFICATION
             # 9degs measured at 5.5bar
-            # Run178 in mV*s
+            if version == 'v1':
+                # Run178 in mV*s
                 ConvPar={
                 "CH1":(6.30e-5,-4.27e-5), # mV*s
                 "CH2":(7.37e-5,-2.94e-5), # mV*s
@@ -978,10 +1200,21 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.53e-5,-5.09e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run178 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.82e-5,3.68e-6), # mV*s
+                "CH2":(8.14e-5,1.76e-6), # mV*s
+                "CH3":(6.37e-5,2.58e-6), # mV*s
+                "CH4":(8.44e-5,4.17e-6)  # mV*s
+                }
+
         elif temp == '10deg':
             # WITH AMPLIFICATION
             # 10degs measured at 4.5bar
-            # Run180 in mV*s
+            if version == 'v1':
+                # Run180 in mV*s
                 ConvPar={
                 "CH1":(6.38e-5,-4.49e-5), # mV*s
                 "CH2":(7.46e-5,-3.31e-5), # mV*s
@@ -989,10 +1222,21 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.57e-5,-5.43e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run180 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(7.19e-5,-2.07e-6), # mV*s
+                "CH2":(7.98e-5,6.32e-6), # mV*s
+                "CH3":(6.77e-5,-1.81e-6), # mV*s
+                "CH4":(8.62e-5,2.00e-6)  # mV*s
+                }
+
         elif temp == '11deg':
             # WITH AMPLIFICATION
             # 11degs measured at 3.5bar
-            # Run182 in mV*s
+            if version == 'v1':
+                # Run182 in mV*s
                 ConvPar={
                 "CH1":(6.47e-5,-4.94e-5), # mV*s
                 "CH2":(7.48e-5,-3.54e-5), # mV*s
@@ -1000,10 +1244,22 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.71e-5,-5.90e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run182 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.95e-5,3.79e-6), # mV*s
+                "CH2":(8.14e-5,3.31e-6), # mV*s
+                "CH3":(6.71e-5,1.97e-6), # mV*s
+                "CH4":(8.49e-5,6.08e-6)  # mV*s
+                }
+
         elif temp == '12deg':
             # WITH AMPLIFICATION
             # 12degs measured at 2.5bar
-            # Run184 in mV*s
+            if version == 'v1':
+                # Run184 in mV*s
+                # Fix baseline + no pedestal removing
                 ConvPar={
                 "CH1":(6.44e-5,-4.88e-5), # mV*s
                 "CH2":(7.47e-5,-3.75e-5), # mV*s
@@ -1011,15 +1267,37 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
                 "CH4":(7.54e-5,-5.84e-5)  # mV*s
                 }
 
+            elif version == 'v2':
+                # Run184 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(7.02e-5,2.84e-6), # mV*s
+                "CH2":(8.23e-5,2.39e-6), # mV*s
+                "CH3":(6.75e-5,8.62e-8), # mV*s
+                "CH4":(8.54e-5,3.83e-6)  # mV*s
+                }
+
         elif temp == '13.5deg':
             # WITH AMPLIFICATION
             # 13.5degs measured at 1.5bar
-            # Run186 in mV*s
+            if version == 'v1':
+                # Run186 in mV*s
+                # Fix baseline + no pedestal removing
                 ConvPar={
                 "CH1":(6.45e-5,-5.38e-5), # mV*s
                 "CH2":(7.38e-5,-4.20e-5), # mV*s
                 "CH3":(6.01e-5,-3.09e-5), # mV*s
                 "CH4":(7.46e-5,-6.20e-5)  # mV*s
+                }
+
+            elif version == 'v2':
+                # Run186 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(7.14e-5,1.97e-6), # mV*s
+                "CH2":(7.96e-5,6.49e-6), # mV*s
+                "CH3":(6.78e-5,2.09e-6), # mV*s
+                "CH4":(8.62e-5,4.86e-6)  # mV*s
                 }
     # Runs 172-186 (Ar) *******************************************************************************
 
@@ -1179,7 +1457,10 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
     else:
         print('Sorry sweetie, we don\'t have callibration for that temperature yet :(')
 
-    
+    if ConvPar is None:
+        raise ValueError(f'No calibration for gas={gas}, temp={temp}, version={version}')
+
+
     # Calculate averages 
     avg_p0 = sum(p[0] for p in ConvPar.values()) / len(ConvPar)
     avg_p1 = sum(p[1] for p in ConvPar.values()) / len(ConvPar)
@@ -1194,6 +1475,352 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None)
 
     photoelectrons = (integral - p1) / p0
     return photoelectrons
+
+def _fmt_sci(x):
+    # 6.97e-05 -> 6.97e-5, matching the existing calibration entries
+    if not np.isfinite(x):
+        return 'np.nan'
+    m, e = f'{x:.2e}'.split('e')
+    return f'{m}e{int(e)}'
+
+def _WriteCalibBlock(func_name, conditions, body, file_path=None):
+    """
+    Replace the body of a nested `if <var> == '<value>':` branch inside
+    function `func_name` of this file. `conditions` is the nesting path,
+    e.g. [('gas', 'Ar'), ('temp', '12deg'), ('version', 'v2')]; `body` is a
+    list of unindented lines, indented here to match the branch.
+    Returns (old_lines, new_lines).
+    """
+    if file_path is None:
+        file_path = os.path.abspath(__file__)
+
+    with open(file_path) as f:
+        lines = f.read().split('\n')
+
+    def indent(line):
+        return len(line) - len(line.lstrip())
+
+    def find(pattern, start, end):
+        rx = re.compile(pattern)
+        for k in range(start, end):
+            if rx.match(lines[k]):
+                return k
+        return None
+
+    def block_end(k):
+        # first non-blank, non-comment line at or below the indentation of line k
+        level = indent(lines[k])
+        for j in range(k + 1, len(lines)):
+            s = lines[j].strip()
+            if s and not s.startswith('#') and indent(lines[j]) <= level:
+                return j
+        return len(lines)
+
+    start = find(rf'def {func_name}\(', 0, len(lines))
+    end   = find(r'def ', start + 1, len(lines)) or len(lines)
+    path  = []
+    for var, value in conditions:
+        path.append(f"{var} == '{value}'")
+        line = find(rf"\s*(el)?if {var} == '{re.escape(value)}':", start, end)
+        if line is None:
+            raise ValueError(f"No `{' -> '.join(path)}` branch in {func_name}")
+        start, end = line, block_end(line)
+
+    # body = lines after the branch line up to the next statement at its level,
+    # minus trailing blank lines / section comments that belong to what follows
+    branch   = start
+    body_end = end
+    while body_end > branch + 1 and (not lines[body_end - 1].strip()
+                                     or indent(lines[body_end - 1]) <= indent(lines[branch])):
+        body_end -= 1
+
+    pad = ' ' * (indent(lines[branch]) + 4)
+    new = [pad + l for l in body]
+    old = lines[branch + 1:body_end]
+    lines[branch + 1:body_end] = new
+
+    with open(file_path, 'w') as f:
+        f.write('\n'.join(lines))
+
+    print(f"Updated {func_name} [{', '.join(v for _, v in conditions)}] in {file_path}")
+    print('--- old ---\n' + '\n'.join(old))
+    print('--- new ---\n' + '\n'.join(new))
+    return old, new
+
+def WriteConvPar(ConvPar, gas, temp, run, version='v2',
+                 comment='Per-run baseline correction + removing pedestal',
+                 file_path=None):
+    """
+    Write a {'CH1': (slope, intercept), ...} calibration into the
+    `elif version == '<version>':` branch of ChargeToPes (in this same file),
+    under the given gas and temp, in the same format as the existing entries.
+    Whatever that branch held before (e.g. the `ConvPar = None` TODO) is replaced.
+
+    Reload the module afterwards (importlib.reload(cig)) for ChargeToPes to see it.
+    """
+    chs  = list(ConvPar.keys())
+    body = [f'# {run} in mV*s', f'# {comment}', 'ConvPar={']
+    for k, ch in enumerate(chs):
+        slope, intercept = ConvPar[ch]
+        sep = ',' if k < len(chs) - 1 else ' '
+        body.append(f'"{ch}":({_fmt_sci(slope)},{_fmt_sci(intercept)}){sep} # mV*s')
+    body.append('}')
+    _WriteCalibBlock('ChargeToPes', [('gas', gas), ('temp', temp), ('version', version)], body, file_path)
+
+def GetDCRPar(temp, gas):
+    """
+    Dark-noise calibration per channel, from FingerPlot4CHs.ipynb's
+    calculate_DCR (Generalized/Borel-Poisson fit to the finger-plot peak areas).
+
+    Returns
+    -------
+    DCRPar : dict of {'CH1': (DCR, DCR_err, lam, lam_err), ...}
+        DCR [Hz] counts PRIMARY dark avalanches only; lam is the total
+        correlated noise (crosstalk + afterpulses) per avalanche, as seen
+        inside the calibration integration window. lam = np.nan where the
+        fit fell back to a plain Poisson (too few peaks).
+    calib_window : float
+        Width [s] of the integration window lam was measured in.
+
+    Fill/overwrite entries from the notebook with WriteDCRPar.
+    """
+    DCRPar, calib_window = None, None
+
+    # Runs 70-115 (Xe) *******************************************************************************
+    if gas == 'Xe':
+        if temp == '8deg':
+            # TODO: Run73 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '10deg':
+            # TODO: Run76 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '11.5deg':
+            # TODO: Run104 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '12deg':
+            # TODO: Run81 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '13deg':
+            # TODO: Run84 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '13v2deg':
+            # TODO: Run107 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '13v3deg':
+            # TODO: Run109 - fill in with WriteDCRPar
+            DCRPar = None
+
+        elif temp == '14deg':
+            # TODO: Run115 - fill in with WriteDCRPar
+            DCRPar = None
+    # Runs 70-115 (Xe) *******************************************************************************
+
+    # Runs 172-186 (Ar) *******************************************************************************
+    elif gas == 'Ar':
+        if temp == '6deg':
+            # Run172, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.34e6,4.21e5,0.043,0.108), # (DCR [Hz], err, lam, err)
+            "CH2":(1.01e6,1.05e5,0.153,0.028), # (DCR [Hz], err, lam, err)
+            "CH3":(7.59e5,5.67e5,0.158,0.162), # (DCR [Hz], err, lam, err)
+            "CH4":(1.10e6,4.49e5,0.117,0.120)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '7deg':
+            # Run174, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.35e6,1.18e5,0.071,0.030), # (DCR [Hz], err, lam, err)
+            "CH2":(1.17e6,1.88e5,0.137,0.050), # (DCR [Hz], err, lam, err)
+            "CH3":(1.26e6,1.11e5,0.081,0.032), # (DCR [Hz], err, lam, err)
+            "CH4":(9.85e5,1.57e5,0.179,0.042)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '8deg':
+            # Run176, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.34e6,2.33e5,0.078,0.060), # (DCR [Hz], err, lam, err)
+            "CH2":(1.13e6,6.04e4,0.154,0.016), # (DCR [Hz], err, lam, err)
+            "CH3":(9.60e5,1.42e4,0.173,0.004), # (DCR [Hz], err, lam, err)
+            "CH4":(1.28e6,3.59e5,0.123,0.095)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '9deg':
+            # Run178, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.42e6,5.81e4,0.047,0.016), # (DCR [Hz], err, lam, err)
+            "CH2":(1.17e6,2.89e5,0.158,0.078), # (DCR [Hz], err, lam, err)
+            "CH3":(1.04e6,8.86e5,0.166,0.282), # (DCR [Hz], err, lam, err)
+            "CH4":(1.46e6,6.37e5,0.047,0.171)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '10deg':
+            # Run180, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.25e6,2.42e5,0.117,0.063), # (DCR [Hz], err, lam, err)
+            "CH2":(1.20e6,1.72e5,0.158,0.046), # (DCR [Hz], err, lam, err)
+            "CH3":(1.43e6,5.01e5,0.033,0.144), # (DCR [Hz], err, lam, err)
+            "CH4":(1.56e6,2.36e5,0.059,0.066)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '11deg':
+            # Run182, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.51e6,2.36e5,0.066,0.061), # (DCR [Hz], err, lam, err)
+            "CH2":(1.32e6,1.59e5,0.151,0.043), # (DCR [Hz], err, lam, err)
+            "CH3":(1.45e6,2.04e5,0.063,0.059), # (DCR [Hz], err, lam, err)
+            "CH4":(1.42e6,6.83e5,0.121,0.180)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '12deg':
+            # Run184, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.45e6,3.54e5,0.102,0.094), # (DCR [Hz], err, lam, err)
+            "CH2":(1.57e6,1.94e5,0.088,0.050), # (DCR [Hz], err, lam, err)
+            "CH3":(1.20e6,3.58e5,0.113,0.102), # (DCR [Hz], err, lam, err)
+            "CH4":(1.01e6,3.32e5,0.272,0.095)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+
+        elif temp == '13.5deg':
+            # Run186, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.77e6,7.69e4,0.043,0.019), # (DCR [Hz], err, lam, err)
+            "CH2":(1.59e6,2.64e5,0.124,0.070), # (DCR [Hz], err, lam, err)
+            "CH3":(1.55e6,2.16e5,0.076,0.063), # (DCR [Hz], err, lam, err)
+            "CH4":(1.44e6,3.79e5,0.160,0.101)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
+    # Runs 172-186 (Ar) *******************************************************************************
+
+    if DCRPar is None:
+        raise ValueError(f'No DCR calibration for gas={gas}, temp={temp}')
+
+    return DCRPar, calib_window
+
+def DarkCountsInWindow(window, channel, temp, gas, correlated=True):
+    """
+    Mean number of non-signal (dark) p.e. expected inside an integration
+    window of width `window` [s], for a channel (1-4, or 'Sum' for the sum
+    of the 4 channels), at the given gas/temp. Meant to be subtracted from
+    the measured mean N_pe (from ChargeToPes) before computing a collection
+    efficiency.
+
+    What is taken into account
+    --------------------------
+    * Primary dark counts: thermal avalanches are a Poisson process with
+      constant rate DCR, uncorrelated with the signal. So the expected
+      number in ANY window of width T is DCR*T, independent of where the
+      window sits relative to the trigger, and it scales linearly with T.
+    * Correlated noise of those dark counts: each primary spawns a
+      Borel(lam) cascade of crosstalk/afterpulse avalanches, giving
+      1/(1-lam) avalanches on average. ChargeToPes converts charge to p.e.
+      with the single-avalanche gain, so each of those secondaries is
+      counted as one more p.e. in the integral. The dark charge in p.e. is
+      therefore DCR*T/(1-lam), not DCR*T. Leaving lam out would undercount
+      it by a factor (1-lam), e.g. 25% for lam = 0.2. Set correlated=False
+      to get the primaries alone (DCR*T), e.g. to count how many windows
+      have a dark count rather than how much charge they add.
+    * 'Sum': the channels are independent SiPMs, so their means add and
+      their errors add in quadrature.
+    * Uncertainty: DCR_err and lam_err from the fit, propagated through
+      DCR*T/(1-lam).
+
+    What is ignored, and why
+    ------------------------
+    * Correlated noise of the SIGNAL p.e.: real photons also trigger
+      crosstalk/afterpulses, so the measured signal is inflated by
+      1/(1-lam) as well. That is not a dark count (it is proportional to
+      the signal, not additive background), so it isn't returned here.
+      For a collection efficiency, correct it separately. With
+      lam = GetDCRPar(temp, gas)[0][ch][2],
+          N_detected = (N_measured - DarkCountsInWindow(...)) * (1 - lam)
+    * Change of lam with window length: lam is measured in calib_window
+      and lumps prompt crosstalk (independent of T) with delayed crosstalk
+      and afterpulses that happen to land inside the window (these grow
+      with T). The peak areas alone can't separate the two, so the same
+      lam is used for any T. That is fine for windows similar to
+      calib_window; a warning is printed when T differs from it by more
+      than a factor 2, since lam is then under- (longer T) or over-
+      (shorter T) estimated.
+    * Dark pulses just before the window whose tail (or afterpulses) leaks
+      in, and those near the end that are only partly integrated: edge
+      effects of order DCR*pulse_width, which on average roughly cancel
+      and are small next to DCR*T for windows much longer than one pulse.
+    * DCR-lam covariance from the fit: not stored, so errors are added in
+      quadrature. The fit pins the mean number of p.e. (theta/(1-lam))
+      better than theta or lam separately, so the two are anticorrelated
+      and the quadrature error is conservative (an overestimate).
+    * Event-by-event fluctuations: only the mean is returned (the variance,
+      theta/(1-lam)^3, is super-Poissonian). For a collection efficiency
+      built from mean N_pe, the mean is what's needed.
+    * Temperature/overvoltage dependence: the DCR depends strongly on
+      temperature, so values are only valid at the calibration point
+      (no interpolation between temperatures).
+    * lam = NaN (plain-Poisson fallback for channels with < 4 peaks):
+      treated as 0, with a warning, since then the correlated part is
+      missing and the result is a lower bound.
+
+    Returns
+    -------
+    n_dark, n_dark_err : float
+        Mean dark p.e. (or primaries, if correlated=False) in the window,
+        and its uncertainty.
+    """
+    DCRPar, calib_window = GetDCRPar(temp, gas)
+
+    if calib_window is not None and not (0.5 <= window / calib_window <= 2):
+        print(f'Warning: window = {window:.2e} s differs from the calibration window '
+              f'({calib_window:.2e} s) by more than x2; lam (correlated noise) is less reliable')
+
+    chs = list(DCRPar.keys()) if channel == 'Sum' else [f'CH{channel}']
+
+    n_dark, var_dark = 0., 0.
+    for ch in chs:
+        DCR, DCR_err, lam, lam_err = DCRPar[ch]
+        if not correlated:
+            lam, lam_err = 0., 0.
+        elif np.isnan(lam):
+            print(f'Warning: {ch} has no correlated-noise fit (lam = NaN), using lam = 0 (lower bound)')
+            lam, lam_err = 0., 0.
+
+        n_dark   += DCR * window / (1 - lam)
+        var_dark += ((window / (1 - lam) * DCR_err)**2
+                     + (DCR * window / (1 - lam)**2 * lam_err)**2)
+
+    return n_dark, np.sqrt(var_dark)
+
+def WriteDCRPar(DCR, DCR_err, XT, XT_err, gas, temp, run, calib_window, file_path=None):
+    """
+    Write calculate_DCR's outputs (dicts of {channel: value}) into the
+    `temp` branch of GetDCRPar (in this same file) under the given gas, in
+    the same format as the existing entries. Whatever that branch held
+    before is replaced.
+
+    Reload the module afterwards (importlib.reload(cig)) for GetDCRPar to see it.
+    """
+    def fmt_lam(x):
+        return f'{x:.3f}' if np.isfinite(x) else 'np.nan'
+
+    chs  = list(DCR.keys())
+    body = [f'# {run}, Generalized Poisson fit', 'DCRPar={']
+    for k, ch in enumerate(chs):
+        sep = ',' if k < len(chs) - 1 else ' '
+        body.append(f'"{ch}":({_fmt_sci(DCR[ch])},{_fmt_sci(DCR_err[ch])},'
+                    f'{fmt_lam(XT[ch])},{fmt_lam(XT_err[ch])}){sep} # (DCR [Hz], err, lam, err)')
+    body += ['}', f'calib_window = {_fmt_sci(calib_window)} # s']
+    _WriteCalibBlock('GetDCRPar', [('gas', gas), ('temp', temp)], body, file_path)
 
 def CreateWfSum(wf, channels, params):
 
