@@ -1001,8 +1001,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run73 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.06e-5,-3.30e-6), # mV*s
+                "CH2":(7.38e-5,-6.74e-6), # mV*s
+                "CH3":(7.39e-5,-3.04e-6), # mV*s
+                "CH4":(5.59e-5,-3.82e-6)  # mV*s
+                }
 
         elif temp == '10deg':
             # WITH AMPLIFICATION
@@ -1017,8 +1023,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run76 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(5.94e-5,-3.61e-7), # mV*s
+                "CH2":(7.74e-5,-1.15e-5), # mV*s
+                "CH3":(8.23e-5,-1.34e-5), # mV*s
+                "CH4":(5.84e-5,-2.72e-6)  # mV*s
+                }
 
         elif temp == '11.5deg':
             # WITH AMPLIFICATION
@@ -1049,8 +1061,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run91 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.62e-5,-5.89e-6), # mV*s
+                "CH2":(7.94e-5,-9.21e-6), # mV*s
+                "CH3":(7.80e-5,-7.94e-9), # mV*s
+                "CH4":(6.62e-5,-1.53e-5)  # mV*s
+                }
 
         elif temp == '13deg':
             # WITH AMPLIFICATION
@@ -1065,8 +1083,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run84 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.55e-5,-5.76e-6), # mV*s
+                "CH2":(7.79e-5,-5.61e-6), # mV*s
+                "CH3":(8.14e-5,-5.47e-6), # mV*s
+                "CH4":(6.57e-5,-1.23e-5)  # mV*s
+                }
 
         elif temp == '13v2deg':
             # WITH AMPLIFICATION
@@ -1204,10 +1228,10 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 # Run178 in mV*s
                 # Per-run baseline correction + removing pedestal
                 ConvPar={
-                "CH1":(6.82e-5,3.68e-6), # mV*s
-                "CH2":(8.14e-5,1.76e-6), # mV*s
-                "CH3":(6.37e-5,2.58e-6), # mV*s
-                "CH4":(8.44e-5,4.17e-6)  # mV*s
+                "CH1":(6.94e-5,1.53e-6), # mV*s
+                "CH2":(8.08e-5,3.07e-6), # mV*s
+                "CH3":(6.84e-5,-5.39e-6), # mV*s
+                "CH4":(8.44e-5,4.34e-6)  # mV*s
                 }
 
         elif temp == '10deg':
@@ -1228,8 +1252,8 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 ConvPar={
                 "CH1":(7.19e-5,-2.07e-6), # mV*s
                 "CH2":(7.98e-5,6.32e-6), # mV*s
-                "CH3":(6.77e-5,-1.81e-6), # mV*s
-                "CH4":(8.62e-5,2.00e-6)  # mV*s
+                "CH3":(6.76e-5,-1.62e-6), # mV*s
+                "CH4":(8.49e-5,4.40e-6)  # mV*s
                 }
 
         elif temp == '11deg':
@@ -1248,10 +1272,10 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 # Run182 in mV*s
                 # Per-run baseline correction + removing pedestal
                 ConvPar={
-                "CH1":(6.95e-5,3.79e-6), # mV*s
-                "CH2":(8.14e-5,3.31e-6), # mV*s
-                "CH3":(6.71e-5,1.97e-6), # mV*s
-                "CH4":(8.49e-5,6.08e-6)  # mV*s
+                "CH1":(6.95e-5,3.78e-6), # mV*s
+                "CH2":(8.14e-5,3.30e-6), # mV*s
+                "CH3":(6.71e-5,1.98e-6), # mV*s
+                "CH4":(8.54e-5,5.22e-6)  # mV*s
                 }
 
         elif temp == '12deg':
@@ -1589,24 +1613,48 @@ def GetDCRPar(temp, gas):
     # Runs 70-115 (Xe) *******************************************************************************
     if gas == 'Xe':
         if temp == '8deg':
-            # TODO: Run73 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run73, Generalized Poisson fit
+            DCRPar={
+            "CH1":(1.77e6,3.29e5,0.067,0.098), # (DCR [Hz], err, lam, err)
+            "CH2":(1.55e6,5.41e5,0.042,0.158), # (DCR [Hz], err, lam, err)
+            "CH3":(1.93e6,1.36e6,0.067,0.441), # (DCR [Hz], err, lam, err)
+            "CH4":(1.90e6,3.28e5,0.000,0.083)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '10deg':
-            # TODO: Run76 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run76, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.09e6,8.85e5,0.031,0.272), # (DCR [Hz], err, lam, err)
+            "CH2":(1.35e6,3.09e4,0.113,0.009), # (DCR [Hz], err, lam, err)
+            "CH3":(2.19e6,2.68e5,0.012,0.078), # (DCR [Hz], err, lam, err)
+            "CH4":(1.76e6,5.93e5,0.062,0.159)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '11.5deg':
             # TODO: Run104 - fill in with WriteDCRPar
             DCRPar = None
 
         elif temp == '12deg':
-            # TODO: Run81 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run91, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.08e6,1.28e5,0.007,0.030), # (DCR [Hz], err, lam, err)
+            "CH2":(1.86e6,6.67e5,0.032,0.176), # (DCR [Hz], err, lam, err)
+            "CH3":(1.70e6,1.01e6,0.126,0.335), # (DCR [Hz], err, lam, err)
+            "CH4":(2.20e6,1.13e6,0.000,0.291)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '13deg':
-            # TODO: Run84 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run84, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.14e6,6.49e5,0.034,0.162), # (DCR [Hz], err, lam, err)
+            "CH2":(2.06e6,2.52e5,0.037,0.063), # (DCR [Hz], err, lam, err)
+            "CH3":(1.39e6,1.30e5,0.252,0.038), # (DCR [Hz], err, lam, err)
+            "CH4":(2.19e6,3.15e5,0.032,0.090)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '13v2deg':
             # TODO: Run107 - fill in with WriteDCRPar
@@ -1656,10 +1704,10 @@ def GetDCRPar(temp, gas):
         elif temp == '9deg':
             # Run178, Generalized Poisson fit
             DCRPar={
-            "CH1":(1.42e6,5.81e4,0.047,0.016), # (DCR [Hz], err, lam, err)
-            "CH2":(1.17e6,2.89e5,0.158,0.078), # (DCR [Hz], err, lam, err)
-            "CH3":(1.04e6,8.86e5,0.166,0.282), # (DCR [Hz], err, lam, err)
-            "CH4":(1.46e6,6.37e5,0.047,0.171)  # (DCR [Hz], err, lam, err)
+            "CH1":(1.35e6,4.83e4,0.074,0.012), # (DCR [Hz], err, lam, err)
+            "CH2":(1.21e6,1.71e5,0.147,0.045), # (DCR [Hz], err, lam, err)
+            "CH3":(1.44e6,9.76e4,0.051,0.028), # (DCR [Hz], err, lam, err)
+            "CH4":(1.13e6,3.20e5,0.185,0.088)  # (DCR [Hz], err, lam, err)
             }
             calib_window = 6.16e-7 # s
 
@@ -1668,8 +1716,8 @@ def GetDCRPar(temp, gas):
             DCRPar={
             "CH1":(1.25e6,2.42e5,0.117,0.063), # (DCR [Hz], err, lam, err)
             "CH2":(1.20e6,1.72e5,0.158,0.046), # (DCR [Hz], err, lam, err)
-            "CH3":(1.43e6,5.01e5,0.033,0.144), # (DCR [Hz], err, lam, err)
-            "CH4":(1.56e6,2.36e5,0.059,0.066)  # (DCR [Hz], err, lam, err)
+            "CH3":(1.42e6,5.42e5,0.037,0.157), # (DCR [Hz], err, lam, err)
+            "CH4":(1.35e6,3.24e5,0.137,0.087)  # (DCR [Hz], err, lam, err)
             }
             calib_window = 6.16e-7 # s
 
@@ -1678,8 +1726,8 @@ def GetDCRPar(temp, gas):
             DCRPar={
             "CH1":(1.51e6,2.36e5,0.066,0.061), # (DCR [Hz], err, lam, err)
             "CH2":(1.32e6,1.59e5,0.151,0.043), # (DCR [Hz], err, lam, err)
-            "CH3":(1.45e6,2.04e5,0.063,0.059), # (DCR [Hz], err, lam, err)
-            "CH4":(1.42e6,6.83e5,0.121,0.180)  # (DCR [Hz], err, lam, err)
+            "CH3":(1.45e6,2.09e5,0.064,0.060), # (DCR [Hz], err, lam, err)
+            "CH4":(1.41e6,6.30e5,0.129,0.166)  # (DCR [Hz], err, lam, err)
             }
             calib_window = 6.16e-7 # s
 
