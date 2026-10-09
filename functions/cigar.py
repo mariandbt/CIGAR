@@ -443,7 +443,8 @@ def FingerSeeds(charge, n_peaks, hist_range=None, oversample=4, min_period_bins=
                 add on top of the hill, in units of statistical fluctuation.
                 Crests (> 0) are fingers, also those that only appear as a
                 shoulder in the raw histogram.
-    3. GAIN   - a rough period from the ripple's FFT, then refined by sliding
+    3. GAIN   - a rough period from the ripple's FFT (halved if the spectrum
+                also peaks clearly at half that period), then refined by sliding
                 a comb mu_1 + k*G (1 PE, 2 PE, 3 PE) over the ripple and keeping
                 the (mu_1, G) whose teeth land on the most ripple. The pedestal
                 is left out on purpose: it sits ~0.8 G below 1 PE, not 1 G, and
@@ -481,7 +482,17 @@ def FingerSeeds(charge, n_peaks, hist_range=None, oversample=4, min_period_bins=
     P     = np.abs(np.fft.rfft(ripple * np.hanning(nb), nfft))**2
     per   = nfft / np.maximum(np.arange(len(P)), 1e-9)   # period in fine bins
     ok    = (per >= min_period_bins * oversample) & (per <= nb / 2.5)
-    gain0 = per[np.flatnonzero(ok)[np.argmax(P[ok])]] * bw
+    i0    = np.flatnonzero(ok)[np.argmax(P[ok])]
+    # sub-harmonic check: on poorly resolved channels the big 1 PE bump next to the
+    # dip on the pedestal side looks like one slow oscillation, so the FFT can lock
+    # onto 2 G. If there is also a clear spectral peak near half that period, that
+    # one is the real finger spacing (resolved channels show < 5% there).
+    half  = np.flatnonzero(ok & (per > 0.4 * per[i0]) & (per < 0.6 * per[i0]))
+    if len(half):
+        ih = half[np.argmax(P[half])]
+        if ih not in (half[0], half[-1]) and P[ih] > 0.25 * P[i0]:
+            i0 = ih
+    gain0 = per[i0] * bw
 
     # rough 1 PE position: FFT phase gives the comb teeth, the tooth nearest 0 is the pedestal
     phase   = np.angle(np.sum(ripple * np.exp(-2j * np.pi * (x - x[0]) / gain0)))
@@ -1045,8 +1056,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run104 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.33e-5,-2.97e-6), # mV*s
+                "CH2":(7.25e-5,5.12e-6), # mV*s
+                "CH3":(7.86e-5,-3.56e-6), # mV*s
+                "CH4":(5.95e-5,-5.34e-6)  # mV*s
+                }
 
         elif temp == '12deg':
             # WITH AMPLIFICATION
@@ -1105,8 +1122,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run107 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.19e-5,8.40e-7), # mV*s
+                "CH2":(7.68e-5,-3.65e-6), # mV*s
+                "CH3":(8.24e-5,-5.52e-6), # mV*s
+                "CH4":(5.77e-5,3.33e-6)  # mV*s
+                }
 
         elif temp == '13v3deg':
             # WITH AMPLIFICATION
@@ -1121,8 +1144,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run109 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.21e-5,2.89e-6), # mV*s
+                "CH2":(7.58e-5,-3.75e-6), # mV*s
+                "CH3":(6.89e-5,2.13e-5), # mV*s
+                "CH4":(5.60e-5,-5.61e-6)  # mV*s
+                }
 
         elif temp == '14deg':
             # WITH AMPLIFICATION
@@ -1137,8 +1166,14 @@ def ChargeToPes(charge_in_Vs, channel, temp, gas, amplified = False, CHAmp=None,
                 }
 
             elif version == 'v2':
-                # TODO: fill in the v2 calibration
-                ConvPar = None
+                # Run115 in mV*s
+                # Per-run baseline correction + removing pedestal
+                ConvPar={
+                "CH1":(6.05e-5,-1.14e-7), # mV*s
+                "CH2":(7.29e-5,3.58e-6), # mV*s
+                "CH3":(5.91e-5,-9.78e-7), # mV*s
+                "CH4":(7.89e-5,-6.35e-6)  # mV*s
+                }
 
 
     # Runs 70-115 (Xe) *******************************************************************************
@@ -1633,8 +1668,14 @@ def GetDCRPar(temp, gas):
             calib_window = 6.16e-7 # s
 
         elif temp == '11.5deg':
-            # TODO: Run104 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run104, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.25e6,2.03e5,0.000,0.049), # (DCR [Hz], err, lam, err)
+            "CH2":(2.01e6,6.59e5,0.002,0.166), # (DCR [Hz], err, lam, err)
+            "CH3":(1.74e6,1.29e6,0.098,0.326), # (DCR [Hz], err, lam, err)
+            "CH4":(2.50e6,9.17e5,0.000,0.275)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '12deg':
             # Run91, Generalized Poisson fit
@@ -1657,16 +1698,34 @@ def GetDCRPar(temp, gas):
             calib_window = 6.16e-7 # s
 
         elif temp == '13v2deg':
-            # TODO: Run107 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run107, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.49e6,5.97e5,0.000,0.146), # (DCR [Hz], err, lam, err)
+            "CH2":(2.08e6,5.00e5,0.051,0.129), # (DCR [Hz], err, lam, err)
+            "CH3":(1.91e6,1.79e4,0.130,0.005), # (DCR [Hz], err, lam, err)
+            "CH4":(2.28e6,2.84e5,0.000,0.070)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '13v3deg':
-            # TODO: Run109 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run109, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.23e6,2.63e5,0.000,0.064), # (DCR [Hz], err, lam, err)
+            "CH2":(2.09e6,1.08e6,0.000,0.296), # (DCR [Hz], err, lam, err)
+            "CH3":(2.29e6,9.94e5,0.000,0.242), # (DCR [Hz], err, lam, err)
+            "CH4":(1.71e6,8.43e5,0.097,0.234)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
 
         elif temp == '14deg':
-            # TODO: Run115 - fill in with WriteDCRPar
-            DCRPar = None
+            # Run115, Generalized Poisson fit
+            DCRPar={
+            "CH1":(2.56e6,1.05e6,0.006,0.268), # (DCR [Hz], err, lam, err)
+            "CH2":(2.12e6,4.39e5,0.057,0.114), # (DCR [Hz], err, lam, err)
+            "CH3":(1.91e6,4.03e5,0.091,0.100), # (DCR [Hz], err, lam, err)
+            "CH4":(2.44e6,1.82e5,0.069,0.045)  # (DCR [Hz], err, lam, err)
+            }
+            calib_window = 6.16e-7 # s
     # Runs 70-115 (Xe) *******************************************************************************
 
     # Runs 172-186 (Ar) *******************************************************************************
@@ -1869,6 +1928,81 @@ def WriteDCRPar(DCR, DCR_err, XT, XT_err, gas, temp, run, calib_window, file_pat
                     f'{fmt_lam(XT[ch])},{fmt_lam(XT_err[ch])}){sep} # (DCR [Hz], err, lam, err)')
     body += ['}', f'calib_window = {_fmt_sci(calib_window)} # s']
     _WriteCalibBlock('GetDCRPar', [('gas', gas), ('temp', temp)], body, file_path)
+
+def GetEpsTot(gas, pressure=None):
+    """
+    Light correction eps_tot: fraction of the scintillation photons of a
+    full-energy Am-241 alpha that are NOT absorbed by the teflon or by the
+    source, i.e. that can reach the SiPMs. From GeometricCorrections.ipynb
+    (2D Gaussian fits to the nexus photon summaries in data/MarcFactors),
+    eps_tot = 1 - mu_teflon/mu_photons - mu_source/mu_photons.
+
+    Returns
+    -------
+    {pressure [bar]: (eps_tot, err, syst_down, syst_up), ...} for the gas,
+    or the tuple of one pressure if `pressure` is given. err is statistical;
+    syst_down/syst_up (both >= 0) are the asymmetric systematic errors from
+    the optical model (GeometricCorrections_SystError.ipynb variations:
+    steel/PTFE reflectivity, PTFE polishing, UNIFIED model), so
+    eps_tot is in [eps_tot - syst_down, eps_tot + syst_up].
+
+    Fill/overwrite entries from the notebook with WriteEpsTot.
+    """
+    EpsTot = None
+
+    if gas == 'Ar':
+        # GeometricCorrections.ipynb, 2D Gaussian fit, photon_threshold = 80
+        EpsTot={
+        1.0:(0.7069,0.0022,0.0000,0.0000), # (eps_tot, err, syst_down, syst_up)
+        1.5:(0.6453,0.0014,0.0045,0.0068), # (eps_tot, err, syst_down, syst_up)
+        2.5:(0.5726,0.0009,0.0026,0.0094), # (eps_tot, err, syst_down, syst_up)
+        3.5:(0.5366,0.0010,0.0000,0.0147), # (eps_tot, err, syst_down, syst_up)
+        4.5:(0.5195,0.0011,0.0003,0.0185), # (eps_tot, err, syst_down, syst_up)
+        5.5:(0.5097,0.0013,0.0032,0.0187), # (eps_tot, err, syst_down, syst_up)
+        6.5:(0.5019,0.0014,0.0000,0.0257), # (eps_tot, err, syst_down, syst_up)
+        7.5:(0.4918,0.0014,0.0005,0.0253), # (eps_tot, err, syst_down, syst_up)
+        8.5:(0.4818,0.0014,0.0007,0.0275)  # (eps_tot, err, syst_down, syst_up)
+        }
+
+    elif gas == 'Xe':
+        # GeometricCorrections.ipynb, 2D Gaussian fit, photon_threshold = 80
+        EpsTot={
+        1.0:(0.6119,0.0010,0.0000,0.0000), # (eps_tot, err, syst_down, syst_up)
+        1.5:(0.5623,0.0010,0.0001,0.0122), # (eps_tot, err, syst_down, syst_up)
+        2.5:(0.5231,0.0012,0.0020,0.0180), # (eps_tot, err, syst_down, syst_up)
+        3.5:(0.5042,0.0014,0.0009,0.0233), # (eps_tot, err, syst_down, syst_up)
+        4.5:(0.4857,0.0014,0.0003,0.0298), # (eps_tot, err, syst_down, syst_up)
+        5.5:(0.4778,0.0013,0.0006,0.0319), # (eps_tot, err, syst_down, syst_up)
+        6.5:(0.4683,0.0012,0.0015,0.0315), # (eps_tot, err, syst_down, syst_up)
+        7.5:(0.4668,0.0011,0.0024,0.0335), # (eps_tot, err, syst_down, syst_up)
+        8.5:(0.4582,0.0010,0.0000,0.0367)  # (eps_tot, err, syst_down, syst_up)
+        }
+
+    if EpsTot is None:
+        raise ValueError(f'No eps_tot for {gas}: run GeometricCorrections.ipynb with write_eps = True')
+    if pressure is None:
+        return EpsTot
+    return EpsTot[pressure]
+
+def WriteEpsTot(eps_tot, eps_tot_err, gas, photon_threshold, syst_down=None, syst_up=None, file_path=None):
+    """
+    Write GeometricCorrections.ipynb's eps_tot, statistical error and
+    systematic errors (dicts of {pressure: value}; missing systematics are
+    written as 0) into the `gas` branch of GetEpsTot (in this same file).
+    Whatever that branch held before is replaced.
+
+    Reload the module afterwards (importlib.reload(cig)) for GetEpsTot to see it.
+    """
+    syst_down = syst_down or {}
+    syst_up   = syst_up or {}
+    pressures = sorted(eps_tot.keys())
+    body = [f'# GeometricCorrections.ipynb, 2D Gaussian fit, photon_threshold = {photon_threshold}', 'EpsTot={']
+    for k, p in enumerate(pressures):
+        sep = ',' if k < len(pressures) - 1 else ' '
+        body.append(f'{float(p)}:({eps_tot[p]:.4f},{eps_tot_err[p]:.4f},'
+                    f'{syst_down.get(p, 0.):.4f},{syst_up.get(p, 0.):.4f}){sep} # (eps_tot, err, syst_down, syst_up)')
+    body.append('}')
+    _WriteCalibBlock('GetEpsTot', [('gas', gas)], body, file_path)
 
 def CreateWfSum(wf, channels, params):
 
